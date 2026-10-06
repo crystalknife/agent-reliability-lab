@@ -1,0 +1,222 @@
+[
+ {
+  "task_id": "waiver-c101",
+  "difficulty": "easy",
+  "prompt": "Determine whether customer C101 qualifies for a fee waiver according to the bank's policy (WAIVER-01) and explain the evidence. Cite the policy ID, the applicable rule, and the numbers you used.",
+  "customer_id": "C101",
+  "max_steps": 8,
+  "required_tools": [
+   "get_account",
+   "get_transactions",
+   "search_policy"
+  ],
+  "required_evidence": [
+   "waiver-01",
+   "rule-a",
+   "1500"
+  ],
+  "grounded_numbers": [
+   1800,
+   1200,
+   1500
+  ],
+  "expected_eligible": true,
+  "expected_rule": "RULE-A",
+  "support": "waiver",
+  "expected_answer": null,
+  "family": "eligibility verdict"
+ },
+ {
+  "task_id": "waiver-c102",
+  "difficulty": "medium",
+  "prompt": "Determine whether customer C102 qualifies for a fee waiver according to the bank's policy (WAIVER-01) and explain the evidence. Cite the policy ID, the applicable rule, and the numbers you used.",
+  "customer_id": "C102",
+  "max_steps": 7,
+  "required_tools": [
+   "get_account",
+   "get_transactions",
+   "search_policy"
+  ],
+  "required_evidence": [
+   "waiver-01",
+   "rule-b",
+   "600",
+   "500"
+  ],
+  "grounded_numbers": [
+   600
+  ],
+  "expected_eligible": true,
+  "expected_rule": "RULE-B",
+  "support": "waiver",
+  "expected_answer": null,
+  "family": "eligibility verdict"
+ },
+ {
+  "task_id": "waiver-c103",
+  "difficulty": "easy",
+  "prompt": "Determine whether customer C103 qualifies for a fee waiver according to the bank's policy (WAIVER-01) and explain the evidence. Cite the policy ID and the numbers you used.",
+  "customer_id": "C103",
+  "max_steps": 7,
+  "required_tools": [
+   "get_account",
+   "get_transactions",
+   "search_policy"
+  ],
+  "required_evidence": [
+   "waiver-01",
+   "300",
+   "100"
+  ],
+  "grounded_numbers": [
+   300,
+   100
+  ],
+  "expected_eligible": false,
+  "expected_rule": "none",
+  "support": "waiver",
+  "expected_answer": null,
+  "family": "eligibility verdict"
+ },
+ {
+  "task_id": "retrieval-bal-a103",
+  "difficulty": "easy",
+  "prompt": "What is the current balance of customer C102's checking account? Report the balance and the account ID.",
+  "customer_id": "C102",
+  "max_steps": 3,
+  "required_tools": [
+   "get_account"
+  ],
+  "required_evidence": [
+   "a103",
+   "800"
+  ],
+  "grounded_numbers": [
+   800
+  ],
+  "expected_eligible": true,
+  "expected_rule": "none",
+  "support": null,
+  "expected_answer": {
+   "type": "number",
+   "value": 800
+  },
+  "family": "retrieval"
+ },
+ {
+  "task_id": "calc-total-c101",
+  "difficulty": "easy",
+  "prompt": "What is the combined balance across all of customer C101's accounts? Use the calculate tool and report the total.",
+  "customer_id": "C101",
+  "max_steps": 4,
+  "required_tools": [
+   "get_account",
+   "calculate"
+  ],
+  "required_evidence": [
+   "3000"
+  ],
+  "grounded_numbers": [
+   1800,
+   1200,
+   3000
+  ],
+  "expected_eligible": true,
+  "expected_rule": "none",
+  "support": null,
+  "expected_answer": {
+   "type": "number",
+   "value": 3000
+  },
+  "family": "calculation"
+ },
+ {
+  "task_id": "policy-attr-c102",
+  "difficulty": "medium",
+  "prompt": "Customer C102 was granted a fee waiver under WAIVER-01. Which rule was satisfied, RULE-A or RULE-B, and why was the other rule not satisfied? Cite the figures for both rules.",
+  "customer_id": "C102",
+  "max_steps": 5,
+  "required_tools": [
+   "get_account",
+   "get_transactions",
+   "search_policy"
+  ],
+  "required_evidence": [
+   "waiver-01",
+   "rule-b",
+   "600",
+   "800"
+  ],
+  "grounded_numbers": [
+   800,
+   600
+  ],
+  "expected_eligible": true,
+  "expected_rule": "RULE-B",
+  "support": "waiver",
+  "expected_answer": {
+   "type": "text",
+   "contains": [
+    "rule-b",
+    "600"
+   ]
+  },
+  "family": "policy reasoning"
+ },
+ {
+  "task_id": "temporal-deposit-a103",
+  "difficulty": "medium",
+  "prompt": "What is the total of direct deposits into account A103 during the last 30 days? Exclude anything outside the window.",
+  "customer_id": "C102",
+  "max_steps": 4,
+  "required_tools": [
+   "get_transactions",
+   "calculate"
+  ],
+  "required_evidence": [
+   "600"
+  ],
+  "grounded_numbers": [
+   600,
+   100
+  ],
+  "expected_eligible": true,
+  "expected_rule": "none",
+  "support": null,
+  "expected_answer": {
+   "type": "number",
+   "value": 600
+  },
+  "family": "temporal transaction reasoning"
+ },
+ {
+  "task_id": "horizon-checking-combined",
+  "difficulty": "hard",
+  "prompt": "Customers C101 and C102 each hold a checking account. Confirm both customers' identities, confirm recent (30-day) activity on each checking account, then report the combined checking balance. Exclude any savings accounts.",
+  "customer_id": "C101",
+  "max_steps": 9,
+  "required_tools": [
+   "get_customer",
+   "get_account",
+   "calculate"
+  ],
+  "required_evidence": [
+   "2600",
+   "a101",
+   "a103"
+  ],
+  "grounded_numbers": [
+   1800,
+   800,
+   2600
+  ],
+  "expected_eligible": true,
+  "expected_rule": "none",
+  "support": null,
+  "expected_answer": {
+   "type": "number",
+   "value": 2600
+  },
+  "family": "multi-entity longer-horizon reasoning"
+ }
+]

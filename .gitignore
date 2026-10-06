@@ -20,6 +20,12 @@ __pycache__/
 .mypy_cache/
 .hypothesis/
 
+# Frontend build output and dependencies (rebuilt via npm ci/build)
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
 # Local model weights and inference binaries (external dependencies,
 # never vendored into the repo)
 *.gguf

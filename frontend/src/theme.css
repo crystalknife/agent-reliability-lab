@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+
+  --color-paper: #f4f1ea;
+  --color-paper-deep: #eae5d8;
+  --color-ink: #1a1815;
+  --color-ink-soft: #4a453c;
+  --color-ink-faint: #8a8272;
+  --color-signal: #ff4d00;
+  --color-moss: #3e6b34;
+  --color-brick: #b3372a;
+  --color-amber-deep: #9a6a00;
+  --color-card: #faf8f2;
+  --color-line: #1a1815;
+}
+
+html {
+  scroll-behavior: auto;
+}
+
+html.lenis, html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  /* Safety net: long mono IDs/URLs must never cause page-level sideways scroll. */
+  overflow-x: clip;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tactile card: 1px ink border + hard offset shadow. No glass, no gradients. */
+.card {
+  background: var(--color-card);
+  border: 1.5px solid var(--color-line);
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 0 var(--color-line);
+}
+
+.card-flat {
+  background: var(--color-card);
+  border: 1.5px solid var(--color-line);
+  border-radius: 10px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

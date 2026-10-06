@@ -1,0 +1,14 @@
+[
+  {
+    "id": "exp-001",
+    "name": "EXP-001 · Local Qwen3-4B Baseline",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "trials": 16,
+    "created": "2026-10-06",
+    "files": {
+      "rows": "exp-001.json",
+      "trajs": "exp-001.traj.json"
+    }
+  }
+]
