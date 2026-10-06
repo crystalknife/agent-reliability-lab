@@ -1,0 +1,27 @@
+{
+  "customers": [
+    {"customer_id": "C101", "name": "Alice Rivera"},
+    {"customer_id": "C102", "name": "Bob Chen"},
+    {"customer_id": "C103", "name": "Carol Diaz"}
+  ],
+  "accounts": [
+    {"account_id": "A101", "customer_id": "C101", "type": "checking", "balance": 1800},
+    {"account_id": "A102", "customer_id": "C101", "type": "savings", "balance": 1200},
+    {"account_id": "A103", "customer_id": "C102", "type": "checking", "balance": 800},
+    {"account_id": "A104", "customer_id": "C103", "type": "checking", "balance": 300}
+  ],
+  "transactions": [
+    {"txn_id": "T001", "account_id": "A101", "type": "direct_deposit", "amount": 400, "days_ago": 10, "description": "payroll"},
+    {"txn_id": "T002", "account_id": "A103", "type": "direct_deposit", "amount": 600, "days_ago": 5, "description": "payroll"},
+    {"txn_id": "T003", "account_id": "A103", "type": "direct_deposit", "amount": 100, "days_ago": 40, "description": "old payroll, outside 30d window"},
+    {"txn_id": "T004", "account_id": "A104", "type": "direct_deposit", "amount": 100, "days_ago": 5, "description": "payroll"},
+    {"txn_id": "T005", "account_id": "A104", "type": "debit", "amount": 50, "days_ago": 2, "description": "groceries"}
+  ],
+  "policies": [
+    {
+      "policy_id": "WAIVER-01",
+      "title": "Monthly maintenance fee waiver",
+      "text": "The $10 monthly maintenance fee is waived if EITHER (RULE-A) the customer's average balance across all accounts is >= $1500, OR (RULE-B) the customer's total direct deposits in the last 30 days is >= $500."
+    }
+  ]
+}

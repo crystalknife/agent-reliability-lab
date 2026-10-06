@@ -1,0 +1,41 @@
+# Secrets: local API keys, never committed.
+API_KEYS/
+.env
+.env.*
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+
+# Local model weights and inference binaries (external dependencies,
+# never vendored into the repo)
+*.gguf
+*.bin
+*.safetensors
+llama-server
+llama-server.exe
+
+# Local probe dumps and runtime state (not research artifacts)
+models-output.txt
+data/state.json
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

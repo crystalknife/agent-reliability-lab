@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minilab"
+version = "0.1.0"
+description = "Mini Agent Reliability Lab: evaluation harness for LLM agent reliability"
+requires-python = ">=3.10"
+
+# Provider SDKs are optional extras. The core harness runs entirely on the
+# standard library; each provider adapter imports its SDK lazily and raises a
+# clear error when the extra is missing.
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+gemini = ["google-genai>=1.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
