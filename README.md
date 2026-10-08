@@ -1,6 +1,7 @@
 <div align="center">
 
-# Agent Reliability Lab
+[![Agent Reliability Lab](docs/assets/minilab-title-light.png#gh-light-mode-only)](https://agent-reliability-minilab.vercel.app/)
+[![Agent Reliability Lab](docs/assets/minilab-title-dark.png#gh-dark-mode-only)](https://agent-reliability-minilab.vercel.app/)
 
 **An experimental framework for measuring AI-agent reliability through controlled tasks, tool use, trajectories, and deterministic evaluation.**
 
@@ -15,6 +16,8 @@
 [Architecture](#architecture) ·
 [Deployment](#deployment) ·
 [Contributing](#contributing)
+
+**[OPEN LIVE OBSERVATORY ↗](https://agent-reliability-minilab.vercel.app/)**
 
 </div>
 
