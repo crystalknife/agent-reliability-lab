@@ -1,7 +1,12 @@
 <div align="center">
 
-[![Agent Reliability Lab](docs/assets/minilab-title-light.png#gh-light-mode-only)](https://agent-reliability-minilab.vercel.app/)
-[![Agent Reliability Lab](docs/assets/minilab-title-dark.png#gh-dark-mode-only)](https://agent-reliability-minilab.vercel.app/)
+<a href="https://agent-reliability-minilab.vercel.app/">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/minilab-title-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/minilab-title-light.png" />
+  <img alt="Agent Reliability Lab" src="docs/assets/minilab-title-light.png" />
+</picture>
+</a>
 
 **An experimental framework for measuring AI-agent reliability through controlled tasks, tool use, trajectories, and deterministic evaluation.**
 
