@@ -3,6 +3,7 @@ import { useExperiment, useManifest } from "../hooks/useExperiment";
 import { agentReliability } from "../lib/selectors";
 import { LabShell } from "../layouts/LabShell";
 import { DashboardBody } from "../components/Dashboard";
+import { Exp002Page } from "../components/Exp002";
 import { Empty, Reveal, SectionTitle } from "../components/display";
 import { Tabs } from "../components/anim/primitives";
 import { StepTimeline, FinalCard, TrialLinkRow, VerdictPanel } from "../components/trajectory";
@@ -26,11 +27,22 @@ export function DashboardPage() {
   return <ExperimentPage id={entries[0].id} />;
 }
 
-/** /experiments/:id — dashboard scoped to one experiment. */
+/** /experiments/:id — dashboard scoped to one experiment. The pilot report
+ *  has its own page; every other experiment uses the trial dashboard. */
 export function ExperimentPage({ id: propId }: { id?: string }) {
   const params = useParams();
   const id = propId ?? params.id;
   const { bundle, error } = useExperiment(id);
+  const { entries } = useManifest();
+  if (id === "exp-002") {
+    const pilot = entries?.find((e) => e.id === "exp-002");
+    if (!pilot) return <LabShell><Loading what="experiment index" /></LabShell>;
+    return (
+      <LabShell>
+        <Exp002Page entry={pilot} />
+      </LabShell>
+    );
+  }
   if (error) return <LabShell><Failed error={error} /></LabShell>;
   if (!bundle) return <LabShell><Loading what={`experiment ${id}`} /></LabShell>;
   return (
@@ -51,10 +63,20 @@ export function ExperimentsPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         {entries?.map((e, i) => (
           <Reveal key={e.id} delay={Math.min(i * 0.05, 0.25)}>
-            <Link to={`/experiments/${e.id}`} className="card block p-5 hover:-translate-y-0.5">
-              <p className="font-mono text-xs text-[var(--color-signal)]">{e.id}</p>
+            <Link to={`/experiments/${e.id}`} className="card flex h-full flex-col p-5 hover:-translate-y-0.5">
+              <p className="font-mono text-xs text-[var(--color-signal)]">
+                {e.id}
+                {e.tag && (
+                  <span className="ml-2 rounded bg-[var(--color-paper-deep)] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-ink-soft)]">
+                    {e.tag}
+                  </span>
+                )}
+              </p>
               <h3 className="font-display text-2xl font-bold tracking-tight">{e.name}</h3>
-              <p className="mt-1 font-mono text-xs text-[var(--color-ink-soft)]">
+              {e.note && (
+                <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-soft)]">{e.note}</p>
+              )}
+              <p className="mt-auto pt-2 font-mono text-xs text-[var(--color-ink-soft)]">
                 {e.provider} · {e.model} · <span className="tnum">{e.trials} trials</span> · {e.created}
               </p>
             </Link>
@@ -187,6 +209,8 @@ export function TrialPage() {
             <dl className="grid grid-cols-2 gap-3">
               <Meta label="provider" value={traj.provider} />
               <Meta label="model" value={traj.model} />
+              {row.framework && <Meta label="framework" value={row.framework} />}
+              {row.strategy && <Meta label="strategy" value={row.strategy} />}
               <Meta label="temperature" value={String(traj.temperature)} />
               <Meta label="max steps" value={`${traj.steps.length} / ${traj.max_steps}`} />
               <Meta label="termination" value={traj.termination_reason} />

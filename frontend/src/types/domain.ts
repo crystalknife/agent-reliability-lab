@@ -48,6 +48,11 @@ export interface TrialRow {
   termination_reason: Termination;
   reasons: string[];
   provider_error?: string;
+  // Framework provenance (EXP-002 arms). Absent on EXP-001 rows.
+  framework?: string;
+  framework_version?: string | null;
+  agent_strategy?: string;
+  strategy?: string;
 }
 
 export interface TrajStep {
@@ -82,6 +87,8 @@ export interface ManifestEntry {
   name: string;
   model: string;
   provider: string;
+  tag?: string;
+  note?: string;
   trials: number;
   created: string;
   files: { rows: string; trajs: string };

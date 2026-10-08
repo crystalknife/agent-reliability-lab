@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -e ".[openai,gemini]"
+      - run: pip install -e ".[openai,gemini,langchain]"
       - run: python -m unittest discover -s tests -v
 
   frontend:

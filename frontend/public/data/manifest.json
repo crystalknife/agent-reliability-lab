@@ -4,11 +4,68 @@
     "name": "EXP-001 · Local Qwen3-4B Baseline",
     "model": "local:qwen3-4b",
     "provider": "local",
+    "tag": "baseline",
     "trials": 16,
     "created": "2026-10-06",
     "files": {
       "rows": "exp-001.json",
       "trajs": "exp-001.traj.json"
+    }
+  },
+  {
+    "id": "exp-002",
+    "name": "EXP-002 · LangChain Framework Pilot",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "LangChain unadjusted observational arm; 8/16. See schema-parity controls — not a superiority claim.",
+    "trials": 16,
+    "created": "2026-10-08",
+    "files": {
+      "rows": "exp-002.json",
+      "trajs": "exp-002.traj.json"
+    }
+  },
+  {
+    "id": "exp-002a",
+    "name": "EXP-002A · Chatter Stripped",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "LangChain + chatter stripping; 8/16. Control arm, not a baseline.",
+    "trials": 16,
+    "created": "2026-10-08",
+    "files": {
+      "rows": "exp-002a.json",
+      "trajs": "exp-002a.traj.json"
+    }
+  },
+  {
+    "id": "exp-002b",
+    "name": "EXP-002B · Schema Parity",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "LangChain + harness-equivalent schemas; 4/16. Control arm, not a baseline.",
+    "trials": 16,
+    "created": "2026-10-08",
+    "files": {
+      "rows": "exp-002b.json",
+      "trajs": "exp-002b.traj.json"
+    }
+  },
+  {
+    "id": "exp-002c",
+    "name": "EXP-002C · Schema + Chatter Parity",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "LangChain + both controls; 4/16. Control arm, not a baseline.",
+    "trials": 16,
+    "created": "2026-10-08",
+    "files": {
+      "rows": "exp-002c.json",
+      "trajs": "exp-002c.traj.json"
     }
   }
 ]
