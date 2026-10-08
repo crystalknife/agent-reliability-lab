@@ -195,7 +195,28 @@ def make_model(name, task_id=None):
 
 def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                    temperature=0.0, results_path="results/results.jsonl",
-                   trajectories_path="results/trajectories.jsonl", data_path=None):
+                   trajectories_path="results/trajectories.jsonl", data_path=None,
+                   framework="minilab", strategy="normal"):
+    if framework not in ("minilab", "langchain"):
+        raise ValueError(f"unknown framework: {framework!r} (use 'minilab' or 'langchain')")
+    if framework == "minilab" and strategy != "normal":
+        raise ValueError(
+            f"strategy {strategy!r} applies only to --framework langchain.")
+    langchain_meta = None
+    if framework == "langchain":
+        from .frameworks.langchain import (
+            FRAMEWORK, STRATEGIES, STRATEGY, framework_version, make_langchain_chat,
+            run_langchain_agent, ScriptedChatModel,
+        )
+        if strategy not in STRATEGIES:
+            raise ValueError(
+                f"unknown strategy: {strategy!r} (use one of {STRATEGIES})")
+        langchain_meta = {
+            "framework": FRAMEWORK,
+            "framework_version": framework_version(),
+            "agent_strategy": STRATEGY,
+            "strategy": strategy,
+        }
     provider = "local-stub"
     task_ids = task_ids or [t["task_id"] for t in TASKS]
     results_path = Path(results_path)
@@ -248,8 +269,24 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                     "temperature": temperature,
                     "seed": seed_used,
                 }
-                traj = run_agent(task_id, task["prompt"], env,
-                                 make_model(model, task_id), max_steps=task["max_steps"], meta=meta)
+                if framework == "langchain":
+                    if model == "scripted":
+                        calls, final = _ORACLE[task_id]
+                        chat_model = ScriptedChatModel(calls, final).model
+                    elif model == "local" or model.startswith("local:"):
+                        chat_model = make_langchain_chat(
+                            model.split(":", 1)[1] if ":" in model else "qwen3-4b",
+                            temperature=temperature)
+                    else:
+                        raise ValueError(
+                            f"framework 'langchain' supports only 'scripted' and "
+                            f"'local:*' models, got {model!r}.")
+                    traj = run_langchain_agent(
+                        task_id, task["prompt"], env, chat_model,
+                        max_steps=task["max_steps"], meta=meta, strategy=strategy)
+                else:
+                    traj = run_agent(task_id, task["prompt"], env,
+                                     make_model(model, task_id), max_steps=task["max_steps"], meta=meta)
                 # The evaluator is deterministic and reads only canonical fields,
                 # but a fault here is still a trial-level condition, not agent behavior.
                 try:
@@ -280,6 +317,19 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                     "termination_reason": traj.termination_reason,
                     "reasons": verdict["reasons"],
                 }
+                # Framework provenance: explicit on every row so a LangChain
+                # trial can never be confused with a custom-harness trial.
+                # Trajectory files stay canonical (model/provider/temperature/
+                # seed identical by design); framework identity lives here.
+                if langchain_meta is not None:
+                    row.update(langchain_meta)
+                else:
+                    row.update({
+                        "framework": "minilab",
+                        "framework_version": None,
+                        "agent_strategy": "minilab.agent.run_agent",
+                        "strategy": "normal",
+                    })
                 if trial_status == "provider_error":
                     # Raw provider text, preserved verbatim for debugging.
                     row["provider_error"] = provider_error_text(traj)
@@ -294,6 +344,16 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tasks", default="all")
+    ap.add_argument("--strategy", default="normal",
+                    choices=("normal", "chatter_stripped", "schema_parity",
+                             "schema_parity_chatter_stripped"),
+                    help="LangChain isolation control (only with --framework "
+                         "langchain): run the normal EXP-002 arm or exactly "
+                         "one confounder control.")
+    ap.add_argument("--framework", default="minilab", choices=("minilab", "langchain"),
+                    help="Agent orchestration: the custom MiniLab harness or a "
+                         "LangChain tool-calling agent over the same tasks, "
+                         "environment, tools, and evaluator.")
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument(
@@ -318,7 +378,8 @@ def main():
     a = ap.parse_args()
     task_ids = [t["task_id"] for t in TASKS] if a.tasks == "all" else a.tasks.split(",")
     rows = run_experiment(task_ids, a.repeats, a.seed, a.model,
-                          a.temperature, a.results, a.trajectories)
+                          a.temperature, a.results, a.trajectories,
+                          framework=a.framework, strategy=a.strategy)
     print(f"wrote {len(rows)} runs to {a.results}")
 
 

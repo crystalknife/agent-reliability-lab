@@ -18,7 +18,9 @@ const DATA = join(process.cwd(), "public", "data");
 
 beforeAll(() => {
   const files: Record<string, string> = {};
-  for (const f of ["manifest.json", "exp-001.json", "exp-001.traj.json", "tasks.json"]) {
+  for (const f of ["manifest.json", "exp-001.json", "exp-001.traj.json", "tasks.json",
+    "exp-002.json", "exp-002.traj.json", "exp-002a.json", "exp-002a.traj.json",
+    "exp-002b.json", "exp-002b.traj.json", "exp-002c.json", "exp-002c.traj.json"]) {
     files[dataUrl(f)] = readFileSync(join(DATA, f), "utf-8");
   }
   vi.stubGlobal("fetch", async (url: string) => ({
@@ -90,5 +92,44 @@ describe("routes render real EXP-001 data", () => {
     await waitFor(() => expect(screen.getByText("final answer", { exact: false })).toBeTruthy());
     expect(document.body.textContent).toContain("evaluator verdict");
     expect(document.body.textContent).toContain("provenance");
+  });
+});
+
+describe("exp-002 pilot report", () => {
+  it("experiments list distinguishes baseline from pilot arms", async () => {
+    at("/experiments", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("exp-002"));
+    expect(document.body.textContent).toContain("baseline");
+    expect(document.body.textContent).toContain("pilot");
+  });
+
+  it("exp-002 report renders the data-driven five-arm comparison", async () => {
+    at("/experiments/exp-002", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("Five-arm comparison"));
+    const text = document.body.textContent ?? "";
+    // Arm titles come from bundles/summary data, not hardcoded JSX.
+    for (const name of ["Custom baseline", "LangChain unadjusted", "Chatter stripped",
+      "Schema parity", "Schema + chatter"]) {
+      expect(text).toContain(name);
+    }
+    // Derived interpretation labels prove the comparison computed.
+    expect(text).toContain("Controlled — matches baseline");
+    expect(text).toContain("Matches unadjusted arm");
+    // Recovered raw data: normal and combined arms expose per-task sets.
+    expect(text).toContain("calc-total-c101");
+    expect(text).not.toContain("per-task breakdown unavailable");
+  });
+
+  it("control arms keep full trial inspection", async () => {
+    at("/experiments/exp-002a/trials", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(screen.getByRole("tablist", { name: "Filter trials" })).toBeTruthy());
+    expect(document.body.textContent).toContain("waiver-c101");
+    expect(document.body.textContent).toContain("waiver-c103");
+  });
+
+  it("recovered arms expose trial and trajectory routes", async () => {
+    at("/experiments/exp-002c/trials", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(screen.getByRole("tablist", { name: "Filter trials" })).toBeTruthy());
+    expect(document.body.textContent).toContain("horizon-checking-combined");
   });
 });

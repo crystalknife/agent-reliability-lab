@@ -14,11 +14,41 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "data"
 
 // Stem -> { rows file, trajs file }. Explicit registry: new experiments are
 // added here deliberately, never auto-globbed (avoids publishing strays).
+// exp-001 stays first: the dashboard defaults to entries[0].
 const EXPERIMENTS = {
   "exp-001": {
     name: "EXP-001 · Local Qwen3-4B Baseline",
+    tag: "baseline",
     rows: "results/local_qwen3_8task_2x.jsonl",
     trajs: "results/local_qwen3_8task_2x_traj.jsonl",
+  },
+  "exp-002": {
+    name: "EXP-002 · LangChain Framework Pilot",
+    tag: "pilot",
+    note: "LangChain unadjusted observational arm; 8/16. See schema-parity controls — not a superiority claim.",
+    rows: "results/exp002_langchain_qwen3_8task_2x.jsonl",
+    trajs: "results/exp002_langchain_qwen3_8task_2x_traj.jsonl",
+  },
+  "exp-002a": {
+    name: "EXP-002A · Chatter Stripped",
+    tag: "pilot",
+    note: "LangChain + chatter stripping; 8/16. Control arm, not a baseline.",
+    rows: "results/exp002a_langchain_chatter_stripped_8task_2x.jsonl",
+    trajs: "results/exp002a_langchain_chatter_stripped_8task_2x_traj.jsonl",
+  },
+  "exp-002b": {
+    name: "EXP-002B · Schema Parity",
+    tag: "pilot",
+    note: "LangChain + harness-equivalent schemas; 4/16. Control arm, not a baseline.",
+    rows: "results/exp002b_langchain_schema_parity_8task_2x.jsonl",
+    trajs: "results/exp002b_langchain_schema_parity_8task_2x_traj.jsonl",
+  },
+  "exp-002c": {
+    name: "EXP-002C · Schema + Chatter Parity",
+    tag: "pilot",
+    note: "LangChain + both controls; 4/16. Control arm, not a baseline.",
+    rows: "results/exp002c_langchain_schema_parity_chatter_stripped_8task_2x.jsonl",
+    trajs: "results/exp002c_langchain_schema_parity_chatter_stripped_8task_2x_traj.jsonl",
   },
 };
 
@@ -66,6 +96,8 @@ async function main() {
       name: cfg.name ?? prettyName(id),
       model: first.model ?? "?",
       provider: first.provider ?? "?",
+      tag: cfg.tag ?? "baseline",
+      ...(cfg.note ? { note: cfg.note } : {}),
       trials: rows.length,
       created,
       files: { rows: `${id}.json`, trajs: `${id}.traj.json` },
@@ -75,6 +107,8 @@ async function main() {
     console.log(`${id}: ${rows.length} rows, ${Object.keys(byRun).length} trajectories`);
   }
   if (only.size === 0) {
+    // Stable index order: exp-001 (dashboard default) first, then pilots.
+    manifest.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     writeFileSync(join(OUT, "manifest.json"), JSON.stringify(manifest, null, 2));
   }
 }
