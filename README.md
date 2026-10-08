@@ -20,6 +20,14 @@
 
 ---
 
+<div align="center">
+
+[![Agent Reliability Lab experimental pipeline from task suite through agent harness, tools, trajectory recording, deterministic evaluation, and pass or failure classification.](docs/assets/minilab-experimental-loop.gif)](https://agent-reliability-minilab.vercel.app/)
+
+</div>
+
+---
+
 > **Status:** Agent Reliability Lab is a **MiniLab — an experimental prototype**, not a mature or universal benchmark. It is intentionally controlled and lightweight. The long-term direction is a domain-specific agent reliability benchmark, and possibly a public leaderboard. Current results are experiments under a specific methodology, **not** broad claims about model intelligence or general agent reliability.
 
 ## Overview
