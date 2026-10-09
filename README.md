@@ -142,6 +142,24 @@ The first controlled baseline is **EXP-001** — the full 8-task suite run again
 
 Read the full write-up: [`docs/experiments/EXP-001-local-qwen3-baseline.md`](docs/experiments/EXP-001-local-qwen3-baseline.md).
 
+### Experiment history
+
+All arms use the local Qwen3-4B model (`local:qwen3-4b`) at temperature 0. EXP-001 remains the primary Dashboard baseline.
+
+| Experiment | Description | Trials | Valid | Passed | Failed | Pass rate |
+|---|---|---:|---:|---:|---:|---:|
+| EXP-001 | Local Qwen3-4B custom-harness baseline | 16 | 16 | 4 | 12 | 25% |
+| EXP-002 | Normal LangChain pilot | 16 | 16 | 8 | 8 | 50% |
+| EXP-002A | Chatter-stripped control | 16 | 16 | 8 | 8 | 50% |
+| EXP-002B | Schema-parity control | 16 | 16 | 4 | 12 | 25% |
+| EXP-002C | Schema-parity + chatter-stripped control | 16 | 16 | 4 | 12 | 25% |
+
+### What the pilot showed
+
+The unadjusted LangChain arm passed 8/16 (50%) against EXP-001's 4/16 (25%), but the schema-parity control passed 4/16 (25%): model-facing schema differences are a material confound in the unadjusted result. The 50% is an observational pilot result, not a framework-superiority claim. Parallel tool-call behavior remains a protocol difference, and with 16 trials per arm no significance claims are supported.
+
+Read the full write-up: [`docs/experiments/EXP-002-langchain-framework-pilot.md`](docs/experiments/EXP-002-langchain-framework-pilot.md).
+
 ## Architecture
 
 ```text
@@ -338,11 +356,14 @@ Live: **<https://agent-reliability-minilab.vercel.app/>**
 - [x] Failure taxonomy
 - [x] Repeated experiments
 - [x] Local Qwen3 baseline (EXP-001)
+- [x] LangChain framework pilot (EXP-002)
+- [x] Framework confounder controls (chatter stripping, schema parity)
 - [x] Observability frontend
 - [x] CI validation
 
 **Next**
 
+- [ ] EXP-003 — controlled framework replication (PLANNED / NEXT): custom MiniLab harness versus LangChain with schema parity, same `local:qwen3-4b` model, same eight-task suite, temperature 0, five repeats per arm (40 trials per arm), same evaluator, environment and task budgets. Not yet run.
 - [ ] Larger task suites
 - [ ] Controlled fault injection
 - [ ] Recovery / reliability experiments
