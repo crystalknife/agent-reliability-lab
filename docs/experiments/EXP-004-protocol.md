@@ -118,6 +118,21 @@ least one task). If the gate fails, report EXP-004 as **infeasible /
 inconclusive** — never as evidence that batch handling has no effect —
 and stop. Pilot trials are never merged into full-run results.
 
+Rationale for the proposed floor: the primary analysis covers all
+valid trials, so any batch-conditional effect is diluted by the
+elicitation rate — at 20% elicitation only ~8 of 40 trials per arm
+exercise batch handling, and a Wilson 95% interval on 8 trials spans
+roughly ±28 points. The ≥20% proposal is therefore a floor for
+informativeness, not a guarantee of resolving power: clearing it means
+only large batch-conditional effects can move the primary estimate
+beyond pilot uncertainty. With 2–3 repeats per pilot task the gate is
+coarse by construction (a single batch clears it), so it functions as
+a floor against zero elicitation; the approval review must carry the
+pilot rate estimate, with its wide interval, into the full-run sizing
+decision rather than treating a bare pass as adequate. Near the floor,
+the run must be resized toward eliciting tasks or abandoned; below the
+floor, it is abandoned per the gate.
+
 ## 7. Primary outcome, secondary metrics, trial accounting
 
 - Primary outcome: pass rate among valid trials per arm
@@ -144,7 +159,10 @@ and stop. Pilot trials are never merged into full-run results.
   (proposed: Newcombe's Wilson-based interval for the difference of
   two independent proportions; exact method fixed at approval before
   execution). **Confidence-interval overlap is not a hypothesis test
-  and must not be used as one.**
+  and must not be used as one.** If the difference interval includes
+  zero, report the comparison as inconclusive — compatible both with no
+  effect and with material effects in either direction — never as
+  evidence of no difference.
 - No equivalence, superiority, or causal claims beyond what the design
   supports. Any causal language is restricted to the isolated factor
   (batch handling within one harness) and is conditional on the
