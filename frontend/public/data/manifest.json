@@ -67,5 +67,33 @@
       "rows": "exp-002c.json",
       "trajs": "exp-002c.traj.json"
     }
+  },
+  {
+    "id": "exp-003a",
+    "name": "EXP-003A · Custom Harness",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "Custom MiniLab harness; 10/40. Controlled replication, not a superiority claim.",
+    "trials": 40,
+    "created": "2026-10-09",
+    "files": {
+      "rows": "exp-003a.json",
+      "trajs": "exp-003a.traj.json"
+    }
+  },
+  {
+    "id": "exp-003b",
+    "name": "EXP-003B · Schema Parity",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "LangChain + harness-equivalent schemas; 10/40. Controlled replication, not a superiority claim.",
+    "trials": 40,
+    "created": "2026-10-09",
+    "files": {
+      "rows": "exp-003b.json",
+      "trajs": "exp-003b.traj.json"
+    }
   }
 ]
