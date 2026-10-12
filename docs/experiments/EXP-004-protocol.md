@@ -61,6 +61,15 @@ source), model-facing tool schemas, task prompts, per-task `max_steps`
 (model-call budget, unchanged semantics), environment/fixture,
 evaluator, temperature (0), seed-label protocol.
 
+Equivalence holds for initial conditions and the handling-rule
+assignment: once the arms diverge (Arm B executing calls Arm A
+discards), subsequent model inputs differ by construction. That
+post-treatment divergence is the effect under study, not a confound;
+the design isolates it by holding everything before the first
+divergence constant. Realized model-request counts will also differ
+endogenously (batch turns do more work per request); both counts are
+recorded as covariates per §7.
+
 ## 4. Required implementation changes (specified, not implemented)
 
 Minimal proposed change, subject to separate code review before any
@@ -102,7 +111,16 @@ activity across several customers/accounts in one response), reusing
 existing tools only. Each new task requires: ground-truth oracle,
 `max_steps` set to oracle length plus slack per the `tasks.py`
 convention, `validate_task` conformance, and review before use. Final
-task list (8 vs 9–10) is fixed at protocol approval, not here.
+task list (8 vs 9–10) is fixed at protocol approval, not here. New
+tasks must additionally keep evaluator support margins robust to
+duplicated observations: `_observed_finances` (`src/minilab/
+evaluation.py`) sums deposits across repeated `get_transactions`
+observations, so a batch repeating a transaction lookup double-counts
+deposits (balances use a mean and are duplication-invariant;
+`grounded_numbers` and `required_tools` are set-based and unaffected).
+Verify support stability under duplicated observations with scripted
+trajectories before approval. Current tasks satisfy this (c103
+100→200 stays below 500; c102 stays supported; c101 is average-based).
 
 ## 6. Elicitation pilot and feasibility gate
 
@@ -169,6 +187,10 @@ floor, it is abandoned per the gate.
   feasibility gate passing.
 - Batch-conditional rates carry no inferential weight (selection-bias
   caveat in §7 applies).
+- All reported intervals treat trials as independent Bernoulli draws
+  and are therefore nominal: repeated trials on the same task and model
+  may be correlated, so true uncertainty may be wider than stated. Do
+  not over-read narrow-looking bounds.
 
 ## 9. Trial count and sample-size rationale (provisional)
 
@@ -246,7 +268,9 @@ method is prohibited.
 1. Harness mode-switch change implemented, reviewed, and covered by
    inference-free scripted-model unit tests (zero / one / multiple
    calls, ordering, observation matching, error handling, budget
-   accounting). Tests green.
+   accounting), plus a regression test asserting sequential-mode
+   trajectories are byte-identical to the pre-change implementation on
+   scripted single-call sequences. Tests green.
 2. New tasks (if any) reviewed with oracles and `max_steps`
    justification.
 3. Final task list, trial count, difference-interval method, elicitation
