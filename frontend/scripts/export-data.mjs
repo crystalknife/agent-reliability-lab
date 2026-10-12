@@ -50,6 +50,20 @@ const EXPERIMENTS = {
     rows: "results/exp002c_langchain_schema_parity_chatter_stripped_8task_2x.jsonl",
     trajs: "results/exp002c_langchain_schema_parity_chatter_stripped_8task_2x_traj.jsonl",
   },
+  "exp-003a": {
+    name: "EXP-003A · Custom Harness",
+    tag: "pilot",
+    note: "Custom MiniLab harness; 10/40. Controlled replication, not a superiority claim.",
+    rows: "results/exp003_custom_8task_5x.jsonl",
+    trajs: "results/exp003_custom_8task_5x_traj.jsonl",
+  },
+  "exp-003b": {
+    name: "EXP-003B · Schema Parity",
+    tag: "pilot",
+    note: "LangChain + harness-equivalent schemas; 10/40. Controlled replication, not a superiority claim.",
+    rows: "results/exp003_langchain_schema_parity_8task_5x.jsonl",
+    trajs: "results/exp003_langchain_schema_parity_8task_5x_traj.jsonl",
+  },
 };
 
 function prettyName(id) {
