@@ -286,7 +286,15 @@ export function Exp002Page({ entry }: { entry: ManifestEntry }) {
         <div className="card p-5 leading-relaxed">
           <p className="max-w-3xl">
             Controlled replication — custom harness vs LangChain with schema
-            parity, 8 tasks × 5 repeats (40 trials per arm). Not yet run.
+            parity, 8 tasks × 5 repeats (40 trials per arm). Complete:{" "}
+            <Link to="/experiments/exp-003a" className="font-bold underline hover:text-[var(--color-signal)]">
+              EXP-003A · Custom Harness
+            </Link>{" "}
+            and{" "}
+            <Link to="/experiments/exp-003b" className="font-bold underline hover:text-[var(--color-signal)]">
+              EXP-003B · Schema Parity
+            </Link>
+            , each 10/40 (25.0%).
           </p>
         </div>
       </section>
