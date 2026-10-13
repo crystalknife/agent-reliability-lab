@@ -26,9 +26,9 @@ def _scripted(tid):
 
 class TestNewTasks(unittest.TestCase):
     def test_all_definitions_validate(self):
-        """A: all eight tasks validate; new ids present with expected_answer."""
+        """A: all ten tasks validate; new ids present with expected_answer."""
         validate_tasks(TASKS)
-        self.assertEqual(len(TASKS), 8)
+        self.assertEqual(len(TASKS), 10)
         for tid in NEW:
             self.assertIn("expected_answer", get_task(tid))
 

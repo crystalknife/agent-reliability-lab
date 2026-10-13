@@ -1,9 +1,12 @@
-# EXP-004 — Batch-Handling Comparison (Protocol Draft; not approved, not run)
+# EXP-004 — Batch-Handling Comparison (Approved protocol; not run)
 
-Status: **DRAFT — NOT APPROVED FOR EXECUTION.** No EXP-004 artifacts
+Status: **APPROVED PROTOCOL. EXPERIMENT NOT AUTHORIZED.** No EXP-004 artifacts
 exist. Do not treat anything below as results. This document specifies
-the experiment only; the required harness change is described, not
-implemented, and no model invocation is authorized by this draft.
+the experiment only; the required harness change is implemented in the
+working tree and is subject to separate code review before any trial,
+and no model invocation is authorized by this approval.
+Pilot, extension, recovery, and main-run trials each require separate
+explicit authorization.
 
 ## 1. Research question and falsifiable hypothesis
 
@@ -23,7 +26,7 @@ enters the context — not concurrency.
 
 Falsifiable hypothesis (H1): the batch-handling arm's pass rate among
 valid trials differs from the first-only arm's by an amount whose
-uncertainty interval for the difference excludes zero (method in §9).
+uncertainty interval for the difference excludes zero (method in §8).
 Null (H0): any observed difference is within pilot uncertainty.
 A null batch-elicitation rate (see §7) renders the trial
 *inconclusive*, never evidence of no effect.
@@ -49,7 +52,7 @@ factor that can be isolated inside a single harness: batch handling.
   minilab`, strategy `normal`, execution mode `sequential`). Status quo
   `run_agent` loop, unchanged.
 - Arm B: same harness with all-calls-per-turn handling (execution mode
-  `batch`, exact flag name fixed at implementation review). One model
+  `batch` via `--exec batch`). One model
   request per turn in **both** arms; Arm B executes every emitted call
   in listed order through the existing synchronous `dispatch` and
   appends every observation before the next model request.
@@ -70,7 +73,7 @@ divergence constant. Realized model-request counts will also differ
 endogenously (batch turns do more work per request); both counts are
 recorded as covariates per §7.
 
-## 4. Required implementation changes (specified, not implemented)
+## 4. Required implementation changes (specified; implemented in working tree, pending review)
 
 Minimal proposed change, subject to separate code review before any
 trial:
@@ -86,15 +89,15 @@ trial:
    observation-to-call matching, and consumes exactly one model-call
    budget unit per turn either way.
 3. Runner (`src/minilab/runner.py`): expose the mode as an explicit CLI
-   flag (proposed `--exec {sequential,batch}`, name fixed at review),
+   flag (`--exec {sequential,batch}`, locked; default `sequential`),
    record mode and per-trial model-request / tool-call counts on every
    result row. Append-only artifact behavior unchanged.
 4. Error semantics preserved: unknown tool still raises `ValueError`
    from `dispatch` (tool_error termination); error-dict observations
    still non-terminal; model exceptions still `model_error`. The batch
    path must define, before execution, whether one failing call aborts
-   the remaining calls in that turn (proposed: abort the turn, record
-   all completed steps, terminate per current rules — fixed at review).
+   the remaining calls in that turn (locked: abort the turn, record
+   all completed steps, terminate per current rules).
 
 Out of scope: concurrency/threads, prompt or schema changes, new tools,
 evaluator changes, budget redefinition.
@@ -105,13 +108,14 @@ Retain all eight existing tasks (`src/minilab/tasks.py`) for
 EXP-003 comparability and pass-rate context. `horizon-checking-combined`
 is the only empirically batch-eliciting task (LangChain path, 5/5
 repeats in EXP-003); spontaneous batching elsewhere is model behavior
-and not guaranteed. Add one or two new multi-lookup tasks designed to
-invite independent parallel calls (e.g. aggregating balances or
-activity across several customers/accounts in one response), reusing
-existing tools only. Each new task requires: ground-truth oracle,
-`max_steps` set to oracle length plus slack per the `tasks.py`
-convention, `validate_task` conformance, and review before use. Final
-task list (8 vs 9–10) is fixed at protocol approval, not here. New
+and not guaranteed. Locked main-run task list, in `--tasks all` order
+(10 tasks): `waiver-c101`, `waiver-c102`, `waiver-c103`,
+`retrieval-bal-a103`, `calc-total-c101`, `policy-attr-c102`,
+`temporal-deposit-a103`, `horizon-checking-combined`,
+`deposit-total-combined`, `retrieval-multi-checking`. The two new
+multi-lookup tasks reuse existing tools only, each with ground-truth
+oracle, `max_steps` per convention, and T1–T3 scripted validation
+evidence (see §14). New
 tasks must additionally keep evaluator support margins robust to
 duplicated observations: `_observed_finances` (`src/minilab/
 evaluation.py`) sums deposits across repeated `get_transactions`
@@ -124,32 +128,76 @@ trajectories before approval. Current tasks satisfy this (c103
 
 ## 6. Elicitation pilot and feasibility gate
 
-Before the full run, execute a small elicitation pilot (proposed: the
-candidate new tasks plus `horizon-checking-combined`, 2–3 repeats each,
-sequential mode only, reserved pilot paths per §13) to estimate the
-model's multi-call emission rate through the harness prompt path.
+Before the full run, execute a small elicitation pilot (pool: the two
+new tasks, `horizon-checking-combined`, and `waiver-c102` — 4 tasks × 4
+repeats = 16 trials, sequential mode only, reserved pilot paths per
+§12) to estimate the model's multi-call emission rate through the
+harness prompt path. This pool is selected in the proposed design and
+takes effect only upon formal protocol approval (§14). Sixteen is the minimal pilot size
+at which zero observed emissions rules out the 20% floor (Wilson 95%
+upper bound 19.4% at 0/16, versus 24.2% at 0/12, which cannot). All
+sizes and thresholds in this section are locked values recorded for
+review; they take effect only on formal protocol approval.
 
-Feasibility gate (predeclared): proceed to the full experiment only if
-batches are emitted in a non-trivial share of pilot trials (exact
-threshold fixed at approval; proposed: ≥20% of pilot trials on at
-least one task). If the gate fails, report EXP-004 as **infeasible /
-inconclusive** — never as evidence that batch handling has no effect —
-and stop. Pilot trials are never merged into full-run results.
+Definitions: a trial is batch-emitting iff its recorded full call list
+contains at least one turn with more than one emitted call. The gate
+uses the emission proportion pooled across the locked pilot task set:
+the denominator is informative trials only — provider, evaluator, and
+environment-error trials carry no emission information and are reported
+separately, never counted as non-emissions. Let p̂ be the pooled
+observed emitting share with Wilson 95% interval [L, U]. Per-task
+emission rates are reported descriptively; the best-performing task
+alone never decides PASS.
+
+Feasibility outcomes (locked rules). Apply in order; the three outcomes are mutually exclusive:
+- PASS: pooled p̂ ≥ 20%. Proceed to full-run sizing.
+- FAIL: p̂ < 20% and pooled U < 20% — evidence the rate is below the
+  floor. Report EXP-004 as infeasible and stop, never as evidence that
+  batch handling has no effect.
+- INCONCLUSIVE: p̂ < 20% and U ≥ 20% (pilot too small to tell).
+  One optional extension of a fixed 16 additional trials on fresh
+  reserved paths is permitted, under new filenames verified absent
+  before the extension run and never appended to the initial pilot
+  files; the extension pools with the original pilot by simple
+  aggregation (same tasks, same sequential mode) and the rule is
+  re-applied once. If the extension yields fewer than 16 informative
+  trials, preserve and report the shortfall: the pooled counts still
+  define p̂ and [L, U] — the wider interval then governs the re-applied
+  rule — and failed trials are never counted as non-emissions. If still
+  inconclusive, abandon as underpowered and stop without
+  a main run.
+Zero informative trials: if a pilot batch yields no informative trials
+at all, p̂ and the Wilson interval are undefined and the batch is void —
+classified neither as FAIL nor as zero emissions. After the
+infrastructure issue is fixed, rerun that batch on fresh reserved paths
+with new filenames verified absent (never appended to the voided
+files); this void rerun does not consume the one statistical extension
+allowance. Report the void batch and its failure reasons separately,
+preserving the audit trail of both attempts.
+Pilot trials are never merged into full-run results.
+
+This gate is a feasibility screen, not a power calculation and not
+evidence of treatment effectiveness: it answers whether the treatment
+will occur often enough to study, and guarantees nothing about
+resolving an effect — only large batch-conditional effects can move
+the primary estimate at pilot N (see rationale below and §9).
 
 Rationale for the proposed floor: the primary analysis covers all
 valid trials, so any batch-conditional effect is diluted by the
-elicitation rate — at 20% elicitation only ~8 of 40 trials per arm
-exercise batch handling, and a Wilson 95% interval on 8 trials spans
-roughly ±28 points. The ≥20% proposal is therefore a floor for
+elicitation rate — for illustration, at a hypothetical 20% elicitation
+only ~10 of 50 trials per arm exercise batch handling, and a Wilson 95%
+interval for a hypothetical 10/50 spans approximately 11.2%–33.0%.
+This is an illustration, not an observed EXP-004 result. The ≥20%
+proposal is therefore a floor for
 informativeness, not a guarantee of resolving power: clearing it means
 only large batch-conditional effects can move the primary estimate
-beyond pilot uncertainty. With 2–3 repeats per pilot task the gate is
-coarse by construction (a single batch clears it), so it functions as
-a floor against zero elicitation; the approval review must carry the
-pilot rate estimate, with its wide interval, into the full-run sizing
-decision rather than treating a bare pass as adequate. Near the floor,
-the run must be resized toward eliciting tasks or abandoned; below the
-floor, it is abandoned per the gate.
+beyond pilot uncertainty. At n=16 the gate is still coarse (a single
+emitting trial is 6.25%, so the PASS/INCONCLUSIVE boundary rests on
+few events); it functions as a floor against near-zero elicitation,
+and the approval review must carry the pilot rate estimate, with its
+wide interval, into the full-run sizing decision rather than treating
+a bare pass as adequate. Near the floor, the run must be resized
+uniformly or abandoned; below the floor, it is abandoned per the gate.
 
 ## 7. Primary outcome, secondary metrics, trial accounting
 
@@ -173,10 +221,15 @@ floor, it is abandoned per the gate.
 ## 8. Statistical analysis and uncertainty
 
 - Report Wilson 95% intervals for each arm's individual pass rate.
-- Report a pre-specified interval for the *difference* in pass rates
-  (proposed: Newcombe's Wilson-based interval for the difference of
-  two independent proportions; exact method fixed at approval before
-  execution). **Confidence-interval overlap is not a hypothesis test
+- Report the pre-specified interval for the *difference* in pass rates:
+  Newcombe's Wilson-based interval for the difference of
+  two independent proportions (z = 1.96, no continuity correction),
+  computed before execution. Both arms share the same task set and
+  planned task/seed layout; seed values are metadata-only and do not
+  themselves establish randomized or paired outcomes, and the outcomes
+  are claimed as neither demonstrably independent nor paired. The
+  independent-proportions interval does not model task-level dependence
+  (see nominal-interval caveat below). **Confidence-interval overlap is not a hypothesis test
   and must not be used as one.** If the difference interval includes
   zero, report the comparison as inconclusive — compatible both with no
   effect and with material effects in either direction — never as
@@ -194,16 +247,24 @@ floor, it is abandoned per the gate.
 
 ## 9. Trial count and sample-size rationale (provisional)
 
-Provisional plan, same pilot scale as EXP-003 for comparability: all
-approved tasks × 5 repeats per arm (40/arm at 8 tasks; 45–50/arm if new
-tasks are added). At 10/40 per arm the Wilson 95% interval spans roughly
-26 points, so only large effects are resolvable — this is a pilot, and
+Locked plan: all ten locked tasks × 5 repeats per arm = 50 planned
+trials per arm. At 12/50 per arm, for example, the Wilson 95% interval spans roughly
+23 points (14.3%–37.4%), so only large effects are resolvable — this is a pilot, and
 no statistical power is claimed without explicit assumptions, which are
-not made here. The count stays provisional until task count, expected
-effect size, observed batch-elicitation frequency (from §6), and
-uncertainty goals are jointly justified at approval. If elicitation is
-rare, the informative denominator is batch-occurring trials, and the
-full run must be resized or abandoned rather than run blindly at 40/arm.
+not made here. Repeat counts stay subject to the §6 sizing outcome
+(resize uniformly or abandon); any change requires re-approval. If elicitation is
+near the floor, the full run must be resized or abandoned rather than
+run blindly at the planned 50/arm. The sizing heuristic uses the pooled Wilson
+lower bound L from the §6 gate (same informative-trial denominator):
+planned main-run trials per arm N should satisfy N × L ≥ ~8
+batch-exercising trials per arm; otherwise scale repeats or abandon.
+Resizing scales repeats uniformly across the
+locked task list — tasks are never reweighted, so per-task repeat
+counts stay equal and EXP-003 task-table comparability is preserved —
+subject to a predeclared cap (proposed: at most twice the base repeats,
+i.e. ≤10 per task; exact cap fixed at approval). Resizing changes N;
+it does not change the task list, the estimand, or the accounting
+rules.
 
 ## 10. Model configuration and inference-randomness limitations
 
@@ -228,11 +289,35 @@ pre-flight pattern before any run.
   provider-failed trials; preserve every fault in the artifacts;
   report provider/infrastructure errors separately from agent
   reliability. Never overwrite existing artifacts or append a
-  continuation to them. Interrupted runs follow an EXP-003 §8-style
-  recovery procedure (preserve partials unchanged, inventory,
-  new uniquely named continuations only where remaining slots are
-  expressible without rerunning completed trials, provenance retained,
-  shortfalls disclosed) — the exact text is fixed at approval.
+  continuation to them. No continuation or rerun is automatic.
+- Interrupted-run recovery, locked: preserve every partial result and
+  trajectory file byte-unchanged, including failed, invalid, and voided
+  attempts. Reconcile original artifacts and all attempts first —
+  inventory completed trials, provider/infrastructure/evaluator
+  failures, duplicate run identifiers, malformed JSONL lines, and
+  result-to-trajectory pairing — and record a documented diagnosis of
+  what stopped and what is missing. A continuation is possible only for
+  genuinely unattempted whole-task slots expressible with the approved
+  flags (`--tasks` subset) without rerunning any completed trial, under
+  new filenames verified absent before launch, preserving `--exec` and
+  every other locked flag; it is a possible, explicitly authorized
+  continuation procedure, not a safe resume — the append-mode runner
+  cannot resume an interrupted run in place. If task/seed slots,
+  pairing, or completion status are ambiguous in any way, stop and
+  report the shortfall instead. Cross-file duplicates are keyed by
+  `(task_id, seed)`; all original artifacts remain immutable and every
+  duplicate or conflicting attempt is preserved and disclosed —
+  original-record precedence never determines validity or the
+  informative denominator on its own. Inclusion follows the predeclared
+  `classify_trial` statuses; if a conflict prevents reliable
+  classification of the affected slots, stop and report the shortfall
+  rather than choosing silently. Never replace an unfavorable,
+  invalid, or incomplete completed attempt. This operational recovery
+  is distinct from the single permitted statistical extension (§6),
+  which adds separately authorized new planned trials rather than
+  completing planned slots. Every continuation requires a documented
+  reason and explicit human authorization recorded before launch (see
+  §14); without it, report the batch as incomplete.
 - Stop conditions: server crash, model swap/unavailability, artifact
   corruption (duplicate run_ids, unparseable lines, mismatched
   result/trajectory pairing), or any prompt to deviate from the
@@ -242,10 +327,17 @@ pre-flight pattern before any run.
 
 Pilot and full-run paths are reserved and verified absent before
 execution; result files open in append mode, so never relaunch against
-existing files. Final filenames are chosen at protocol approval, not in
-this draft (proposed stems: `results/exp004_pilot_*` and
-`results/exp004_minilab_seq_*` / `results/exp004_minilab_batch_*` with
-matching `*_traj` files). No result or trajectory files are created by
+existing files. Locked artifact paths (all verified absent; re-verify
+immediately before each run; names denote allocated capacity):
+- Pilot: `results/exp004_pilot_seq_4task_4x.jsonl` and
+  `results/exp004_pilot_seq_4task_4x_traj.jsonl`.
+- Extension: `results/exp004_pilot_ext_seq_16x.jsonl` and
+  `results/exp004_pilot_ext_seq_16x_traj.jsonl`.
+- Arm A: `results/exp004_minilab_seq_10task_5x.jsonl` and
+  `results/exp004_minilab_seq_10task_5x_traj.jsonl`.
+- Arm B: `results/exp004_minilab_batch_10task_5x.jsonl` and
+  `results/exp004_minilab_batch_10task_5x_traj.jsonl`.
+No result or trajectory files are created by
 this draft. Combining partial runs without a protocol-approved recovery
 method is prohibited.
 
@@ -273,15 +365,32 @@ method is prohibited.
    scripted single-call sequences. Tests green.
 2. New tasks (if any) reviewed with oracles and `max_steps`
    justification.
-3. Final task list, trial count, difference-interval method, elicitation
-   threshold, and artifact filenames approved in a revised protocol;
-   this draft's `DRAFT` status lifted explicitly.
-4. Pre-flight green: clean `main` at recorded HEAD, server health +
-   model confirmation, adapter smoke test (pre-flight only, never a
-   trial), reserved paths absent, `python -m unittest discover -s
-   tests` green.
-5. Elicitation pilot passes the §6 gate; otherwise stop as infeasible.
-6. Full run Arm A → validate → Arm B, per approved commands only.
+3. Design lock: the locked values in §§5, 6, 8, 9, 12 are confirmed
+   as the approved design. Design lock authorizes no trials.
+4. Formal protocol approval: GRANTED by explicit human statement
+   recorded here; DRAFT is lifted. Approval alone authorizes no trials.
+5. Pilot authorization: a separate explicit decision, granted only
+   after pre-flight passes at the pinned execution checkout (clean
+   tree at recorded HEAD, server health + model confirmation, adapter
+   smoke test as pre-flight only, reserved pilot paths verified
+   absent, full test suite green).
+6. Pilot execution and gate evaluation: run the 16-trial pilot per
+   approved commands only; compute pooled p̂ and [L, U]; apply the §6
+   ordered rule; record PASS / FAIL / INCONCLUSIVE with counts.
+7. Extension authorization and execution: permitted only on a recorded
+   INCONCLUSIVE outcome, by separate explicit decision, on fresh paths
+   verified absent; fixed 16 trials (same 4 tasks × 4 repeats,
+   sequential mode), no early stopping on emerging emissions;
+   re-apply the gate once to pooled counts.
+8. Main-run authorization and execution: permitted only on a recorded
+   PASS plus the N×L sizing review, by separate explicit decision;
+   Arm A → validate → Arm B per approved commands only.
+9. Recovery authorization: any continuation after an interrupted or
+   failed batch requires a separate explicit decision with documented
+   diagnosis and fresh verified-absent paths, granted only when §11
+   permits continuation; otherwise report the shortfall. Recovery
+   authorization is distinct from pilot, extension, and main-run
+   authorizations and never substitutes for them.
 
 ## 15. Handoff
 
@@ -289,6 +398,8 @@ To continue without this conversation: this document, the EXP-003
 protocol (§§3–6 for harness context) and results report (§§5–6 for the
 batch observations motivating this design), the source files cited
 above, and a clean checkout at the HEAD recorded in the run log. Open
-questions: exact `--exec` flag name, batch-turn error-abort rule, new
-task definitions, elicitation threshold, difference-interval method,
-final filenames and trial count — all deferred to approval by design.
+questions remaining: none on design values (all locked above; formal
+approval granted); remaining are process decisions — pilot
+authorization, extension authorization (if gated),
+and main-run authorization — each requiring a separate explicit
+human statement. Locked values took effect on formal approval.

@@ -183,6 +183,44 @@ TASKS = [
         "support": None,
         "expected_answer": {"type": "number", "value": 2600},
     },
+    {
+        # EXP-004 candidate: independent lookups invite parallel calls.
+        "task_id": "deposit-total-combined",
+        "difficulty": "medium",
+        "customer_id": "C101",
+        "prompt": (
+            "What is the total of direct deposits into accounts A101 and A103 "
+            "during the last 30 days? Include only deposits within the window."
+        ),
+        "expected_eligible": True,
+        "expected_rule": "none",
+        "required_evidence": ["1000"],
+        # oracle needs 4 invocations (3 calls + final)
+        "max_steps": 5,
+        "required_tools": ["get_transactions", "calculate"],
+        "grounded_numbers": [400, 600, 1000],
+        "support": None,
+        "expected_answer": {"type": "number", "value": 1000},
+    },
+    {
+        # EXP-004 candidate: three independent lookups invite parallel calls.
+        "task_id": "retrieval-multi-checking",
+        "difficulty": "medium",
+        "customer_id": "C101",
+        "prompt": (
+            "Report the current checking balance of each customer C101, C102, "
+            "and C103. Report each account ID with its balance."
+        ),
+        "expected_eligible": True,
+        "expected_rule": "none",
+        "required_evidence": ["a101", "1800", "a103", "800", "a104", "300"],
+        # oracle needs 4 invocations (3 calls + final)
+        "max_steps": 5,
+        "required_tools": ["get_account"],
+        "grounded_numbers": [1800, 800, 300],
+        "support": None,
+        "expected_answer": {"type": "text", "contains": ["a101", "1800", "a103", "800", "a104", "300"]},
+    },
 ]
 
 

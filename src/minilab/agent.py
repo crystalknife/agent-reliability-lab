@@ -32,16 +32,48 @@ def _model_config(meta):
     }
 
 
-def run_agent(task_id, task_prompt, env, model_fn, max_steps=8, meta=None):
+def _as_call_list(out):
+    """Normalize one model response to a non-empty call list, else None.
+
+    Accepts {"tool", "arguments"} (single call, historical shape) or
+    {"calls": [...]} (multi-call emission). Anything else — including an
+    empty calls list — is malformed and yields None.
+    """
+    if isinstance(out, dict) and isinstance(out.get("calls"), list) and out["calls"]:
+        calls = out["calls"]
+    elif (isinstance(out, dict) and "tool" in out
+            and isinstance(out.get("arguments", {}), dict)):
+        calls = [{"tool": out["tool"], "arguments": out.get("arguments", {}) or {}}]
+    else:
+        return None
+    normalized = []
+    for c in calls:
+        if (not isinstance(c, dict) or "tool" not in c
+                or not isinstance(c.get("arguments", {}), dict)):
+            return None
+        normalized.append({"tool": c["tool"], "arguments": c.get("arguments", {}) or {}})
+    return normalized
+
+
+def run_agent(task_id, task_prompt, env, model_fn, max_steps=8, meta=None,
+              exec_mode="sequential"):
     """Run one episode. Always returns a Trajectory, never raises.
 
-    model_fn(messages, tool_schemas, config) -> {"tool", "arguments"} | {"final"}.
+    model_fn(messages, tool_schemas, config) -> {"tool", "arguments"} | {"calls", [...]} | {"final"}.
     messages is a plain list of {"role", "content"} dicts; observations are
     JSON-serialized. config carries model/experiment settings explicitly.
     meta carries trajectory provenance (experiment_id, run_id, timestamp,
     model, provider, temperature, seed); max_steps/task_id/prompt come from
     the explicit arguments.
+    exec_mode selects batch handling: "sequential" executes only the first
+    emitted call per turn (historical behavior, default); "batch" executes
+    every emitted call in listed order through the same synchronous
+    dispatch. Either way one loop iteration — one model-call budget unit —
+    covers one model response. Unknown exec_mode raises ValueError.
     """
+    if exec_mode not in ("sequential", "batch"):
+        raise ValueError(
+            f"unknown exec_mode: {exec_mode!r} (use 'sequential' or 'batch').")
     meta = meta or {}
     messages = [
         {"role": "system", "content": build_system_prompt()},
@@ -68,30 +100,38 @@ def run_agent(task_id, task_prompt, env, model_fn, max_steps=8, meta=None):
             termination_reason = "agent_final"
             break
 
-        if (not isinstance(out, dict) or "tool" not in out
-                or not isinstance(out.get("arguments", {}), dict)):
+        calls = _as_call_list(out)
+        if calls is None:
             steps.append(Step(step=i, action="invalid_action", arguments={},
                               observation={"error": f"invalid model output: {out!r}"}))
             termination_reason = "invalid_action"
             break
 
-        name, args = out["tool"], out.get("arguments", {}) or {}
-        try:
-            obs = dispatch(env, name, args)
-        except ValueError as e:
-            steps.append(Step(step=i, action=name, arguments=args, observation={"error": str(e)}))
-            termination_reason = "tool_error"
+        if exec_mode == "sequential":
+            calls = calls[:1]
+        turn_failed = False
+        for call in calls:
+            name, args = call["tool"], call.get("arguments", {}) or {}
+            try:
+                obs = dispatch(env, name, args)
+            except ValueError as e:
+                steps.append(Step(step=i, action=name, arguments=args, observation={"error": str(e)}))
+                termination_reason = "tool_error"
+                turn_failed = True
+                break
+            except Exception as e:  # noqa: BLE001 - tool/infra faults terminate, never crash
+                steps.append(Step(step=i, action=name, arguments=args,
+                                  observation={"error": f"tool error: {e!r}"}))
+                termination_reason = "tool_error"
+                turn_failed = True
+                break
+            steps.append(Step(step=i, action=name, arguments=args, observation=obs))
+            obs_json = json.dumps(obs, default=str)
+            messages.append({"role": "assistant", "content": {"tool": name, "arguments": args}})
+            messages.append({"role": "user", "content": f"observation: {obs_json}"})
+            raw_history.append({"role": "user", "content": f"observation: {obs_json}"})
+        if turn_failed:
             break
-        except Exception as e:  # noqa: BLE001 - tool/infra faults terminate, never crash
-            steps.append(Step(step=i, action=name, arguments=args,
-                              observation={"error": f"tool error: {e!r}"}))
-            termination_reason = "tool_error"
-            break
-        steps.append(Step(step=i, action=name, arguments=args, observation=obs))
-        obs_json = json.dumps(obs, default=str)
-        messages.append({"role": "assistant", "content": {"tool": name, "arguments": args}})
-        messages.append({"role": "user", "content": f"observation: {obs_json}"})
-        raw_history.append({"role": "user", "content": f"observation: {obs_json}"})
 
     return Trajectory(
         task_id=task_id,

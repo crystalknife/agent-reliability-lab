@@ -8,7 +8,7 @@ does not exist on real OpenAI SDK responses (they live at
 an AttributeError. This adapter is therefore self-contained and parses the
 real response shape.
 
-    model_fn(messages, tool_schemas, config) -> {"tool", "arguments"} | {"final"}
+    model_fn(messages, tool_schemas, config) -> {"tool", "arguments"} | {"calls", [...]} | {"final"}
 
 The server is external: never started from here, no retries, no fallbacks, no
 model switching. The configured model ID is sent verbatim; llama-server
@@ -143,15 +143,21 @@ def make_local_model(model_name: str = DEFAULT_MODEL):
         # Real OpenAI SDK shape: tool calls live on the message, not the choice.
         tool_calls = message.tool_calls
         if tool_calls:
-            call = tool_calls[0]
-            try:
-                args = json.loads(call.function.arguments)
-            except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Invalid JSON in tool call arguments for tool {call.function.name}: "
-                    f"{call.function.arguments}"
-                ) from e
-            return {"tool": call.function.name, "arguments": args}
+            parsed = []
+            for call in tool_calls:
+                try:
+                    args = json.loads(call.function.arguments)
+                except json.JSONDecodeError as e:
+                    raise ValueError(
+                        f"Invalid JSON in tool call arguments for tool {call.function.name}: "
+                        f"{call.function.arguments}"
+                    ) from e
+                parsed.append({"tool": call.function.name, "arguments": args})
+            # Single calls keep the exact historical shape; only genuine
+            # multi-call responses use the list form (see agent.run_agent).
+            if len(parsed) == 1:
+                return parsed[0]
+            return {"calls": parsed}
         content = message.content
         return {"final": content if content is not None else ""}
 
