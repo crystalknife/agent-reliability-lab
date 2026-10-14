@@ -64,6 +64,20 @@ const EXPERIMENTS = {
     rows: "results/exp003_langchain_schema_parity_8task_5x.jsonl",
     trajs: "results/exp003_langchain_schema_parity_8task_5x_traj.jsonl",
   },
+  "exp-004a": {
+    name: "EXP-004A · Sequential Batch Handling",
+    tag: "pilot",
+    note: "MiniLab harness, first call only; 20/50. Batch-handling comparison vs exp-004b — inconclusive, not equivalence.",
+    rows: "results/exp004_minilab_seq_10task_5x.jsonl",
+    trajs: "results/exp004_minilab_seq_10task_5x_traj.jsonl",
+  },
+  "exp-004b": {
+    name: "EXP-004B · Batch Handling",
+    tag: "pilot",
+    note: "MiniLab harness, all emitted calls; 20/50. Batch-handling comparison vs exp-004a — inconclusive, not equivalence.",
+    rows: "results/exp004_minilab_batch_10task_5x.jsonl",
+    trajs: "results/exp004_minilab_batch_10task_5x_traj.jsonl",
+  },
 };
 
 function prettyName(id) {

@@ -95,5 +95,33 @@
       "rows": "exp-003b.json",
       "trajs": "exp-003b.traj.json"
     }
+  },
+  {
+    "id": "exp-004a",
+    "name": "EXP-004A · Sequential Batch Handling",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "MiniLab harness, first call only; 20/50. Batch-handling comparison vs exp-004b — inconclusive, not equivalence.",
+    "trials": 50,
+    "created": "2026-10-13",
+    "files": {
+      "rows": "exp-004a.json",
+      "trajs": "exp-004a.traj.json"
+    }
+  },
+  {
+    "id": "exp-004b",
+    "name": "EXP-004B · Batch Handling",
+    "model": "local:qwen3-4b",
+    "provider": "local",
+    "tag": "pilot",
+    "note": "MiniLab harness, all emitted calls; 20/50. Batch-handling comparison vs exp-004a — inconclusive, not equivalence.",
+    "trials": 50,
+    "created": "2026-10-13",
+    "files": {
+      "rows": "exp-004b.json",
+      "trajs": "exp-004b.traj.json"
+    }
   }
 ]
