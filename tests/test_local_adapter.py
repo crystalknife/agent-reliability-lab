@@ -106,9 +106,10 @@ class TestLocalAdapter(unittest.TestCase):
 
     def test_malformed_arguments_raise(self):
         response = MagicMock()
-        call = response.choices[0].message.tool_calls[0]
+        call = MagicMock()
         call.function.name = "get_account"
         call.function.arguments = "{not json"
+        response.choices[0].message.tool_calls = [call]
         with patch("minilab.models.local.OpenAI") as mock_openai:
             client = mock_openai.return_value
             client.chat.completions.create.return_value = response

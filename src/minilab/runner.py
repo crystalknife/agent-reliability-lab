@@ -17,6 +17,7 @@ from .env import MiniBankEnv
 from .evaluation import evaluate
 from .failures import classify, classify_trial, provider_error_text
 from .tasks import TASKS, get_task
+from .tools import TOOL_NAMES
 from .trajectory import Trajectory
 
 RESULTS_FIELDS = (
@@ -102,6 +103,22 @@ _ORACLE = {
             ("calculate", {"op": "add", "values": [1800, 800]}),
         ],
         "Combined checking balance for C101 and C102 is 2600 (A101 1800 + A103 800).",
+    ),
+    "deposit-total-combined": (
+        [
+            ("get_transactions", {"account_id": "A101", "last_n_days": 30}),
+            ("get_transactions", {"account_id": "A103", "last_n_days": 30}),
+            ("calculate", {"op": "sum", "values": [400, 600]}),
+        ],
+        "Total 30-day direct deposits for A101 and A103: 1000.",
+    ),
+    "retrieval-multi-checking": (
+        [
+            ("get_account", {"customer_id": "C101"}),
+            ("get_account", {"customer_id": "C102"}),
+            ("get_account", {"customer_id": "C103"}),
+        ],
+        "Checking balances: A101 1800, A103 800, A104 300.",
     ),
 }
 
@@ -193,10 +210,41 @@ def make_model(name, task_id=None):
 
 
 
+def _provenance_counts(traj):
+    """Model-request and tool-call counts for one trajectory.
+
+    model_requests counts returned model responses (assistant messages in
+    the harness history, AIMessages in a LangChain history); requests that
+    raised before producing a response are not counted. tool_calls counts
+    recorded steps that dispatch a real tool (pseudo-steps such as
+    model_error/invalid_action are excluded).
+    """
+    history = traj.raw_history or []
+    if history and isinstance(history[0], dict) and "role" in history[0]:
+        model_requests = sum(1 for m in history if m.get("role") == "assistant")
+    else:
+        model_requests = sum(1 for m in history if m.get("type") == "AIMessage")
+    steps = traj.steps or []
+    tool_calls = sum(1 for s in steps
+                     if (s if isinstance(s, dict) else {"action": s.action}).get("action") in TOOL_NAMES)
+    return model_requests, tool_calls
+
+
 def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                    temperature=0.0, results_path="results/results.jsonl",
                    trajectories_path="results/trajectories.jsonl", data_path=None,
-                   framework="minilab", strategy="normal"):
+                   framework="minilab", strategy="normal", exec_mode="sequential"):
+    if framework not in ("minilab", "langchain"):
+        raise ValueError(f"unknown framework: {framework!r} (use 'minilab' or 'langchain')")
+    if framework == "minilab" and strategy != "normal":
+        raise ValueError(
+            f"strategy {strategy!r} applies only to --framework langchain.")
+    if exec_mode not in ("sequential", "batch"):
+        raise ValueError(
+            f"unknown exec_mode: {exec_mode!r} (use 'sequential' or 'batch').")
+    if framework != "minilab" and exec_mode != "sequential":
+        raise ValueError(
+            f"--exec {exec_mode!r} applies only to --framework minilab.")
     if framework not in ("minilab", "langchain"):
         raise ValueError(f"unknown framework: {framework!r} (use 'minilab' or 'langchain')")
     if framework == "minilab" and strategy != "normal":
@@ -286,7 +334,8 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                         max_steps=task["max_steps"], meta=meta, strategy=strategy)
                 else:
                     traj = run_agent(task_id, task["prompt"], env,
-                                     make_model(model, task_id), max_steps=task["max_steps"], meta=meta)
+                                     make_model(model, task_id), max_steps=task["max_steps"], meta=meta,
+                                     exec_mode=exec_mode)
                 # The evaluator is deterministic and reads only canonical fields,
                 # but a fault here is still a trial-level condition, not agent behavior.
                 try:
@@ -299,6 +348,7 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                     evaluator_raised = True
                 trial_status = classify_trial(traj, evaluator_raised=evaluator_raised)
                 failure = classify(task, traj, verdict)
+                model_requests, tool_calls = _provenance_counts(traj)
                 row = {
                     "run_id": run_id,
                     "human_run_id": human_run_id,
@@ -316,6 +366,8 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                     "failure": failure,
                     "termination_reason": traj.termination_reason,
                     "reasons": verdict["reasons"],
+                    "model_requests": model_requests,
+                    "tool_calls": tool_calls,
                 }
                 # Framework provenance: explicit on every row so a LangChain
                 # trial can never be confused with a custom-harness trial.
@@ -323,6 +375,9 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                 # seed identical by design); framework identity lives here.
                 if langchain_meta is not None:
                     row.update(langchain_meta)
+                    # LangChain executes whole AIMessage batches natively
+                    # (parallel ToolNode); there is no sequential/batch switch.
+                    row["exec_mode"] = "native"
                 else:
                     row.update({
                         "framework": "minilab",
@@ -330,6 +385,7 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
                         "agent_strategy": "minilab.agent.run_agent",
                         "strategy": "normal",
                     })
+                    row["exec_mode"] = exec_mode
                 if trial_status == "provider_error":
                     # Raw provider text, preserved verbatim for debugging.
                     row["provider_error"] = provider_error_text(traj)
@@ -354,6 +410,11 @@ def main():
                     help="Agent orchestration: the custom MiniLab harness or a "
                          "LangChain tool-calling agent over the same tasks, "
                          "environment, tools, and evaluator.")
+    ap.add_argument("--exec", default="sequential", choices=("sequential", "batch"),
+                    help="MiniLab batch handling: execute only the first emitted "
+                         "tool call per turn, or every emitted call in listed "
+                         "order. Only with --framework minilab; one model-call "
+                         "budget unit is consumed per turn either way.")
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument(
@@ -379,7 +440,8 @@ def main():
     task_ids = [t["task_id"] for t in TASKS] if a.tasks == "all" else a.tasks.split(",")
     rows = run_experiment(task_ids, a.repeats, a.seed, a.model,
                           a.temperature, a.results, a.trajectories,
-                          framework=a.framework, strategy=a.strategy)
+                          framework=a.framework, strategy=a.strategy,
+                          exec_mode=a.exec)
     print(f"wrote {len(rows)} runs to {a.results}")
 
 
