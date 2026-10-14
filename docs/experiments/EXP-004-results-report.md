@@ -82,7 +82,8 @@ batch-handling factor under the stated limitations.
 
 ## 6. Validity, errors, and artifact integrity
 
-- Trial statuses: 100/100 `valid` across pilot + main run; zero
+- Trial statuses: pilot 16/16 `valid`, main run 100/100 `valid`
+  across both arms — 116/116 valid across all three runs; zero
   provider, infrastructure, or evaluator errors; nothing excluded from
   any denominator.
 - Run IDs: 50 unique per main-run file, 16 unique in the pilot, 1:1
