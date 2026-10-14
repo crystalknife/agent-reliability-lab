@@ -218,5 +218,70 @@
    "value": 2600
   },
   "family": "multi-entity longer-horizon reasoning"
+ },
+ {
+  "task_id": "deposit-total-combined",
+  "difficulty": "medium",
+  "prompt": "What is the total of direct deposits into accounts A101 and A103 during the last 30 days? Include only deposits within the window.",
+  "customer_id": "C101",
+  "max_steps": 5,
+  "required_tools": [
+   "get_transactions",
+   "calculate"
+  ],
+  "required_evidence": [
+   "1000"
+  ],
+  "grounded_numbers": [
+   400,
+   600,
+   1000
+  ],
+  "expected_eligible": true,
+  "expected_rule": "none",
+  "support": null,
+  "expected_answer": {
+   "type": "number",
+   "value": 1000
+  },
+  "family": "general"
+ },
+ {
+  "task_id": "retrieval-multi-checking",
+  "difficulty": "medium",
+  "prompt": "Report the current checking balance of each customer C101, C102, and C103. Report each account ID with its balance.",
+  "customer_id": "C101",
+  "max_steps": 5,
+  "required_tools": [
+   "get_account"
+  ],
+  "required_evidence": [
+   "a101",
+   "1800",
+   "a103",
+   "800",
+   "a104",
+   "300"
+  ],
+  "grounded_numbers": [
+   1800,
+   800,
+   300
+  ],
+  "expected_eligible": true,
+  "expected_rule": "none",
+  "support": null,
+  "expected_answer": {
+   "type": "text",
+   "contains": [
+    "a101",
+    "1800",
+    "a103",
+    "800",
+    "a104",
+    "300"
+   ]
+  },
+  "family": "general"
  }
 ]
