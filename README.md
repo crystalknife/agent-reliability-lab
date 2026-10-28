@@ -28,7 +28,7 @@
 
 ---
 
-> **Status:** Agent Reliability Lab is a **MiniLab — an experimental prototype**, not a mature or universal benchmark. It is intentionally controlled and lightweight. The long-term direction is a domain-specific agent reliability benchmark, and possibly a public leaderboard. Current results are experiments under a specific methodology, **not** broad claims about model intelligence or general agent reliability.
+> **Status:** Agent Reliability Lab is a **MiniLab — an experimental prototype**, not a mature or universal benchmark. It is intentionally controlled and lightweight. The long-term direction is a domain-specific agent reliability benchmark, and possibly a public leaderboard. Current results are experiments under a specific methodology, **not** broad claims about model intelligence or general agent reliability. Current snapshot: four completed studies (EXP-001 through EXP-004), a 10-task MiniBank suite, and nine published dashboard arms. The latest result (EXP-004, batch handling) is inconclusive at pilot scale.
 
 ## Overview
 
@@ -43,7 +43,7 @@ The core properties of the current MVP:
 - **Deterministic evaluation.** Verdict, evidence citation, and numeric/tool grounding are checked by rules, not a model.
 - **Failure classification.** A small, fixed taxonomy describes *agent-level* failures.
 - **Repeated trials.** Experiments run the same suite multiple times to produce measurable, reproducible results.
-- **Preserved artifacts.** Results and trajectories are append-only research artifacts.
+- **Preserved artifacts.** Results and trajectories are append-only research artifacts; study reports and dashboard exports are published in the repository.
 
 ## Capabilities
 
@@ -106,10 +106,9 @@ The recorded experiment data has a read-only observability frontend, deployed at
 
 **<https://agent-reliability-minilab.vercel.app/>**
 
-It lets you explore what the experiments produced:
+The site opens with an Observatory overview homepage and then lets you explore what the experiments produced:
 
-It lets you explore what the experiments produced:
-
+- Overview homepage with live aggregate counts
 - Experiment overview and provenance
 - Per-task performance
 - Trial inspection
@@ -120,45 +119,54 @@ It lets you explore what the experiments produced:
 
 > The frontend **does not execute the benchmark**. It is a static observability layer over recorded artifacts. Python remains the authoritative experiment and evaluation layer.
 
-## Current Experiment
+## Latest Result — EXP-004
 
-The first controlled baseline is **EXP-001** — the full 8-task suite run against a local Qwen3-4B model.
+The most recent completed study is **EXP-004**, a batch-handling comparison on the expanded **10-task** MiniBank suite. Both arms run the custom MiniLab harness with `local:qwen3-4b`, temperature 0, the same prompts, tool schemas, fixtures, evaluator, and model-call budget. They differ in one behavior: whether every tool call emitted in a single assistant turn is processed, or only the first.
 
-| Field | Value |
-|---|---|
-| Experiment | EXP-001 |
-| Model | local Qwen3-4B (`local:qwen3-4b`) |
-| Task suite | 8 tasks |
-| Trials | 16 (8 tasks × 2 seeds) |
-| Valid trials | 16 |
-| Provider errors | 0 |
-| Passed | 4 |
-| Failed | 12 |
-| Agent reliability | **25%** (valid trials only) |
+| Arm | Tool-call handling | Tasks | Trials | Valid | Passed | Pass rate (valid) |
+|---|---|---:|---:|---:|---:|---:|
+| EXP-004A | first call only (`sequential`) | 10 | 50 | 50 | 20 | 40.0% |
+| EXP-004B | all emitted calls (`batch`) | 10 | 50 | 50 | 20 | 40.0% |
 
-**Failure breakdown** (valid trials): `evidence_gap` 8, `policy_misread` 4, `none` (pass) 4.
+Difference (B − A): **+0.0 percentage points**, Newcombe–Wilson 95% interval **−18.6 to +18.6 points**. The interval includes zero and is wide, so the comparison is **inconclusive** — compatible with no effect and with material effects in either direction. Per-task pass/fail outcomes were identical across arms. The only divergence was the failure label on the already-failed `horizon-checking-combined` task (both arms 0/5), replicating the EXP-003 pattern without changing any outcome.
 
-> **This is a baseline experiment under the current MiniLab methodology — not a general claim about Qwen3-4B.** It is the outcome of this specific task suite, evidence contract, and inference configuration, on CPU-only hardware.
+> **This is a pilot-scale result under one model and one task suite — not evidence of equivalence, superiority, or absence of effect.**
 
-Read the full write-up: [`docs/experiments/EXP-001-local-qwen3-baseline.md`](docs/experiments/EXP-001-local-qwen3-baseline.md).
+Read the full write-up: [`docs/experiments/EXP-004-results-report.md`](docs/experiments/EXP-004-results-report.md).
 
 ### Experiment history
 
-All arms use the local Qwen3-4B model (`local:qwen3-4b`) at temperature 0. EXP-001 remains the primary Dashboard baseline.
+All arms use the local Qwen3-4B model (`local:qwen3-4b`) at temperature 0. EXP-001 remains the primary Dashboard baseline; EXP-004 is the latest completed study.
 
-| Experiment | Description | Trials | Valid | Passed | Failed | Pass rate |
-|---|---|---:|---:|---:|---:|---:|
-| EXP-001 | Local Qwen3-4B custom-harness baseline | 16 | 16 | 4 | 12 | 25% |
-| EXP-002 | Normal LangChain pilot | 16 | 16 | 8 | 8 | 50% |
-| EXP-002A | Chatter-stripped control | 16 | 16 | 8 | 8 | 50% |
-| EXP-002B | Schema-parity control | 16 | 16 | 4 | 12 | 25% |
-| EXP-002C | Schema-parity + chatter-stripped control | 16 | 16 | 4 | 12 | 25% |
+| Experiment | Description | Tasks | Trials | Valid | Passed | Failed | Pass rate |
+|---|---|---:|---:|---:|---:|---:|---:|
+| EXP-001 | Local Qwen3-4B custom-harness baseline | 8 | 16 | 16 | 4 | 12 | 25.0% |
+| EXP-002 | Normal LangChain pilot | 8 | 16 | 16 | 8 | 8 | 50.0% |
+| EXP-002A | Chatter-stripped control | 8 | 16 | 16 | 8 | 8 | 50.0% |
+| EXP-002B | Schema-parity control | 8 | 16 | 16 | 4 | 12 | 25.0% |
+| EXP-002C | Schema-parity + chatter-stripped control | 8 | 16 | 16 | 4 | 12 | 25.0% |
+| EXP-003A | Custom MiniLab harness (controlled replication) | 8 | 40 | 40 | 10 | 30 | 25.0% |
+| EXP-003B | LangChain, schema parity (controlled replication) | 8 | 40 | 40 | 10 | 30 | 25.0% |
+| EXP-004A | First call only (`sequential`) | 10 | 50 | 50 | 20 | 30 | 40.0% |
+| EXP-004B | All emitted calls (`batch`) | 10 | 50 | 50 | 20 | 30 | 40.0% |
 
-### What the pilot showed
+> The 10-task suite adds `deposit-total-combined` and `retrieval-multi-checking` to the original eight tasks. Trial counts are per arm; EXP-003 and EXP-004 recorded zero provider/infrastructure/evaluator errors.
 
-The unadjusted LangChain arm passed 8/16 (50%) against EXP-001's 4/16 (25%), but the schema-parity control passed 4/16 (25%): model-facing schema differences are a material confound in the unadjusted result. The 50% is an observational pilot result, not a framework-superiority claim. Parallel tool-call behavior remains a protocol difference, and with 16 trials per arm no significance claims are supported.
+Read the baseline write-up: [`docs/experiments/EXP-001-local-qwen3-baseline.md`](docs/experiments/EXP-001-local-qwen3-baseline.md).
+
+### What the experiments showed
+
+**EXP-002 — framework pilot and confound controls.** The unadjusted LangChain arm passed 8/16 (50.0%) against EXP-001's 4/16 (25.0%), but the schema-parity control passed 4/16 (25.0%): model-facing schema differences are a material confound in the unadjusted result. The 50% is an observational pilot result, not a framework-superiority claim. Parallel tool-call behavior remains a protocol difference, and with 16 trials per arm no significance claims are supported.
 
 Read the full write-up: [`docs/experiments/EXP-002-langchain-framework-pilot.md`](docs/experiments/EXP-002-langchain-framework-pilot.md).
+
+**EXP-003 — controlled replication under schema parity.** With 40 trials per arm, both the custom harness and the LangChain arm passed 10/40 (25.0%; Wilson 95% CI 14.2%–40.2%). Both arms passed the same two tasks in all five repeats and failed the other six in all five repeats. No per-task pass/fail difference was observed. Equal observed rates at this scale establish neither equivalence nor superiority.
+
+Read the full write-up: [`docs/experiments/EXP-003-controlled-replication.md`](docs/experiments/EXP-003-controlled-replication.md).
+
+**EXP-004 — batch handling.** Processing all emitted tool calls versus only the first produced the same observed pass rate (20/50, 40.0% in each arm) with a 95% interval for the difference of −18.6 to +18.6 points — an inconclusive result. The only between-arm divergence was the failure label on the already-failed `horizon-checking-combined` task. The experiment cannot speak to true concurrency because both arms dispatch synchronously and all tools are stateless reads.
+
+> **Scope:** results describe specific configurations (one local model, one task suite, pilot-scale trial counts, deterministic evaluator). They are not broad claims about model intelligence, framework superiority, or production readiness.
 
 ## Architecture
 
@@ -201,7 +209,7 @@ agent-reliability-lab/
 │   └── models/         # provider + local adapters
 ├── tests/              # Python test suite
 ├── data/               # deterministic MiniBank fixture
-├── results/            # append-only experiment artifacts (JSONL)
+├── results/            # recorded experiment artifacts (JSONL)
 ├── docs/               # architecture + experiment write-ups
 ├── frontend/           # React + TypeScript observability UI (Vercel)
 ├── scripts/            # data export helpers
@@ -253,14 +261,14 @@ Trial status is tracked on a separate axis (`valid`, `provider_error`, `environm
 
 An experiment is a repeated, recorded run of a task suite:
 
-- **Repeated runs** with explicit **seeds**.
+- **Repeated runs** with recorded **seed labels** (grouping metadata in EXP-003/EXP-004).
 - **Model/provider metadata** and inference config recorded per run.
 - **Full trajectory recording** for every trial.
 - **Append-only JSONL artifacts** that are never rewritten.
-- **Experiment documentation** alongside the raw artifacts.
+- **Experiment documentation** for every published study.
 - **Separation of valid trials from provider/infrastructure failures.**
 
-Reproducibility metadata (model, provider, seed, temperature, run identifiers) is preserved with every trial, so a result can be traced back to the exact configuration that produced it.
+Reproducibility metadata (model, provider, seed label, temperature, run identifiers) is preserved with every trial, so a result can be traced back to the exact configuration that produced it.
 
 ## 🚀 Quickstart
 
@@ -281,11 +289,13 @@ Run the test suite:
 python -m unittest discover -s tests -v
 ```
 
-Run the deterministic oracle control (validates the harness — expected **8/8 passed**):
+Run the deterministic oracle control (validates the harness — expected **10/10 passed**):
 
 ```powershell
-python -m minilab.runner --tasks all --repeats 1 --seed 0 --model scripted
-python -m minilab.metrics --results results/results.jsonl
+python -m minilab.runner --tasks all --repeats 1 --seed 0 --model scripted `
+  --results results/oracle_check.jsonl `
+  --trajectories results/oracle_check_traj.jsonl
+python -m minilab.metrics --results results/oracle_check.jsonl
 ```
 
 Run a first experiment against the built-in stub and aggregate it:
@@ -302,9 +312,11 @@ Run the observability frontend locally (optional — static over recorded data):
 ```powershell
 cd frontend
 npm ci
-npm run data   # regenerate static experiment data from results/
+npm run data   # regenerate static experiment data from available ../results artifacts
 npm run dev
 ```
+
+Committed exports under `frontend/public/data/` power the deployed site without Python or the raw artifacts; `npm run data` regenerates them when the artifacts are available locally.
 
 ## Model Providers
 
@@ -323,7 +335,8 @@ API-backed and local execution differ only in where inference happens; everythin
 The lab separates what is deterministic from what is not:
 
 - **Deterministic by design:** the MiniBank environment, the tools, and the rule-based evaluator.
-- **Explicitly recorded:** seeds, model/provider identifiers, temperature, prompt provenance where available, run identifiers, and full trajectories.
+- **Explicitly recorded:** seed labels, model/provider identifiers, temperature, prompt provenance where available, run identifiers, and full trajectories. In EXP-003 and EXP-004, seed values are grouping labels only — they are not transmitted to local inference and do not establish sampler control or independent sampling.
+- **Published vs local:** study reports and exported dashboard data are committed; raw JSONL artifacts for newer studies are preserved locally and intentionally kept out of the repository.
 - **Append-only:** experiment artifacts are written once and never rewritten.
 
 > The environment and evaluator are deterministic by design; **model inference may still vary** depending on the provider/runtime. `temperature=0` does not guarantee identical output across builds or providers, so full configuration is recorded for auditability rather than assumed.
@@ -331,7 +344,7 @@ The lab separates what is deterministic from what is not:
 ## Development
 
 - CI runs on every pull request targeting `main` and on pushes to `main`.
-- Two required checks: **Python tests (204)** and **Frontend tests, typecheck, build**.
+- Two required checks: **Python tests** and **Frontend tests, typecheck, build**.
 - `main` is protected: changes land through pull requests with these checks passing.
 - The frontend job (`frontend/`) runs `npm ci`, `npm test`, `npm run typecheck`, and `npm run build`.
 
@@ -358,12 +371,14 @@ Live: **<https://agent-reliability-minilab.vercel.app/>**
 - [x] Local Qwen3 baseline (EXP-001)
 - [x] LangChain framework pilot (EXP-002)
 - [x] Framework confounder controls (chatter stripping, schema parity)
-- [x] Observability frontend
+- [x] Controlled framework replication (EXP-003)
+- [x] Batch-handling comparison (EXP-004)
+- [x] Expanded 10-task suite
+- [x] Observability frontend and overview homepage
 - [x] CI validation
 
 **Next**
 
-- [ ] EXP-003 — controlled framework replication (PLANNED / NEXT): custom MiniLab harness versus LangChain with schema parity, same `local:qwen3-4b` model, same eight-task suite, temperature 0, five repeats per arm (40 trials per arm), same evaluator, environment and task budgets. Not yet run.
 - [ ] Larger task suites
 - [ ] Controlled fault injection
 - [ ] Recovery / reliability experiments
