@@ -123,7 +123,9 @@ export function hasInAppHistory(): boolean {
 }
 
 /** Consistent Back control: browser history when it stays in-app,
- *  otherwise the given in-app fallback. Never strands deep-link visitors. */
+ *  otherwise the given in-app fallback. Never strands deep-link visitors.
+ *  The fallback replaces the entry so repeated Back presses keep walking
+ *  toward Home instead of ping-ponging with a pushed entry. */
 export function BackButton({ to, children }: { to: string; children?: ReactNode }) {
   const navigate = useNavigate();
   return (
@@ -131,7 +133,7 @@ export function BackButton({ to, children }: { to: string; children?: ReactNode 
       type="button"
       onClick={() => {
         if (hasInAppHistory()) navigate(-1);
-        else navigate(to);
+        else navigate(to, { replace: true });
       }}
       className="card-flat inline-flex w-fit items-center gap-1.5 px-3 py-1.5 font-mono text-xs text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-deep)] hover:text-[var(--color-ink)]"
     >

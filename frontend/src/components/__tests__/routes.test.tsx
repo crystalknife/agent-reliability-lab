@@ -150,6 +150,18 @@ describe("navigation controls", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Experiments" })).toBeTruthy());
   });
 
+  it("repeated Back from a direct deep link walks to Home without looping", async () => {
+    window.history.replaceState({ idx: 0 }, "", "/experiments/exp-001");
+    render(<BrowserRouter><Routes>{routes}</Routes></BrowserRouter>);
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Experiments" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("Making agent reliability measurable"));
+    expect(screen.queryByRole("button", { name: /back/i })).toBeNull();
+  });
+
   it("Back from a directly opened dashboard falls back to the homepage", async () => {
     at("/dashboard", <Routes>{routes}</Routes>);
     await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));

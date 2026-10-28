@@ -186,11 +186,12 @@ export function createChase(seed = 1) {
         crawler.speed = approach(crawler.speed, 20, 80 * dt);
         crawler.heading = turn(crawler.heading, crawler.desired, 2.4 * dt);
       }
-      crawler.gait += crawler.speed * dt * 0.42;
-      crawler.heading = wrap(crawler.heading);
-      crawler.x = clamp(crawler.x + Math.cos(crawler.heading) * crawler.speed * dt, EDGE, SCENE_W - EDGE);
-      crawler.y = clamp(crawler.y + Math.sin(crawler.heading) * crawler.speed * dt, EDGE, SCENE_H - EDGE);
     }
+
+    crawler.gait += crawler.speed * dt * 0.42;
+    crawler.heading = wrap(crawler.heading);
+    crawler.x = clamp(crawler.x + Math.cos(crawler.heading) * crawler.speed * dt, EDGE, SCENE_W - EDGE);
+    crawler.y = clamp(crawler.y + Math.sin(crawler.heading) * crawler.speed * dt, EDGE, SCENE_H - EDGE);
   }
 
   function snapshot(): ChaseSnapshot {

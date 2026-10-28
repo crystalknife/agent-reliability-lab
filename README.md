@@ -312,11 +312,10 @@ Run the observability frontend locally (optional — static over recorded data):
 ```powershell
 cd frontend
 npm ci
-npm run data   # regenerate static experiment data from available ../results artifacts
 npm run dev
 ```
 
-Committed exports under `frontend/public/data/` power the deployed site without Python or the raw artifacts; `npm run data` regenerates them when the artifacts are available locally.
+Committed exports under `frontend/public/data/` power the deployed site without Python or the raw artifacts. Regenerating them with `npm run data` requires Python and the raw artifact pairs for all nine published arms; the exporter writes only the arms it finds and rewrites `manifest.json` to match, so running it on a partial checkout will shrink the site. The committed exports are the complete set.
 
 ## Model Providers
 

@@ -8,15 +8,18 @@ Never writes to `../results`; never redefines benchmark semantics
 
 ```powershell
 npm install
-npm run data        # export ../results JSONL -> public/data (requires local artifacts)
 npm run dev         # http://localhost:5173
 npm test            # vitest: selectors, routing/navigation, pursuit simulation
 npm run build       # tsc + vite build -> dist/
 ```
 
 Committed exports under `public/data/` power the deployed site without Python
-or the raw artifacts; `npm run data` regenerates them when the artifacts are
-available locally. Current exports cover EXP-001 through EXP-004 (nine arms).
+or the raw artifacts. Current exports cover EXP-001 through EXP-004 (nine arms).
+
+`npm run data` regenerates them, but it needs Python and the raw artifact pairs
+for all nine arms. It writes only the arms it finds and rewrites `manifest.json`
+to match, so a partial checkout produces an incomplete site. The committed
+exports are the complete set.
 
 ## Routes
 
@@ -29,9 +32,9 @@ back to the dashboard.
 ## Homepage
 
 The landing page describes the project and shows live aggregate counts from
-the exported manifest. Its hero is a self-contained SVG pursuit simulation
-(`src/components/HeroChase.tsx`) with no added runtime dependency;
-reduced-motion users get a static scene.
+the exported per-experiment JSON referenced by the manifest. Its hero is a
+self-contained SVG pursuit simulation (`src/components/HeroChase.tsx`) with no
+added runtime dependency; reduced-motion users get a static scene.
 
 ## Vendored motion primitives
 

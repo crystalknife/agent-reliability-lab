@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useManifest } from "../hooks/useExperiment";
 import { dataUrl } from "../lib/load";
 import { isTrialRow } from "../lib/guards";
+import { validRows } from "../lib/selectors";
 import { Reveal } from "../components/display";
 import { HeroChase } from "../components/HeroChase";
 import { LabShell } from "../layouts/LabShell";
@@ -218,7 +219,7 @@ export function HomePage() {
             target="_blank"
             rel="noreferrer"
             className="card-flat shrink-0 px-5 py-2.5 font-mono text-sm font-bold hover:bg-[var(--color-paper-deep)]"
-            aria-label="Explore the agent-reliability-lab repository on GitHub"
+            aria-label="Explore repo on GitHub"
           >
             Explore repo →
           </a>
@@ -291,28 +292,36 @@ function ExperimentSpotlight() {
 
 function ExperimentCounts() {
   const { entries } = useManifest();
-  const [counts, setCounts] = React.useState<{ trials: number; passed: number; n: number } | null>(null);
+  const [counts, setCounts] = React.useState<{
+    trials: number; passed: number; n: number; loaded: number; failed: number;
+  } | null>(null);
   React.useEffect(() => {
     if (!entries) return;
     let live = true;
     (async () => {
       let trials = 0;
       let passed = 0;
+      let loaded = 0;
+      let failed = 0;
       for (const e of entries) {
         try {
           // Rows only (not trajectories), through the same base-path-aware
           // loader and row guard as the dashboards.
           const res = await fetch(dataUrl(e.files.rows));
-          if (!res.ok) continue;
-          const rows = (await res.json()) as unknown[];
-          const valid = rows.filter(isTrialRow);
+          if (!res.ok) {
+            failed++;
+            continue;
+          }
+          const rows = (await res.json() as unknown[]).filter(isTrialRow);
+          const valid = validRows(rows);
           trials += valid.length;
-          passed += valid.filter((r) => r.passed === true).length;
+          passed += valid.filter((r) => r.passed).length;
+          loaded++;
         } catch {
-          // Skip unloadable entries; show what verified.
+          failed++;
         }
       }
-      if (live) setCounts({ trials, passed, n: entries.length });
+      if (live) setCounts({ trials, passed, n: entries.length, loaded, failed });
     })();
     return () => { live = false; };
   }, [entries]);
@@ -320,6 +329,13 @@ function ExperimentCounts() {
     return (
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
         Browse all experiments, compare results, and dive into detailed analyses.
+      </p>
+    );
+  }
+  if (counts.loaded === 0) {
+    return (
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
+        Experiment data is unavailable right now. Browse the experiments to inspect the published results.
       </p>
     );
   }
@@ -331,13 +347,15 @@ function ExperimentCounts() {
         Each experiment tests a specific aspect of agent behavior with transparent methods and data.
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-xs sm:grid-cols-4">
-        <div><dt className="text-[var(--color-ink-faint)]">Experiments</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{counts.n}</dd></div>
-        <div><dt className="text-[var(--color-ink-faint)]">Total trials</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{counts.trials}</dd></div>
-        <div><dt className="text-[var(--color-ink-faint)]">Successful trials</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{counts.passed}</dd></div>
-        <div><dt className="text-[var(--color-ink-faint)]">Overall success rate</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{rate.toFixed(1)}%</dd></div>
+        <div><dt className="text-[var(--color-ink-soft)]">Experiments</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{counts.n}</dd></div>
+        <div><dt className="text-[var(--color-ink-soft)]">Total trials</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{counts.trials}</dd></div>
+        <div><dt className="text-[var(--color-ink-soft)]">Successful trials</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{counts.passed}</dd></div>
+        <div><dt className="text-[var(--color-ink-soft)]">Overall success rate</dt><dd className="tnum text-base font-bold text-[var(--color-ink)]">{rate.toFixed(1)}%</dd></div>
       </dl>
-      <p className="mt-1 font-mono text-[11px] text-[var(--color-ink-faint)]">
-        Pooled across all {counts.n} published experiments; per-experiment rates differ.
+      <p className="mt-1 font-mono text-[11px] text-[var(--color-ink-soft)]">
+        {counts.failed > 0
+          ? `Pooled across ${counts.loaded} of ${counts.n} published experiments; some data could not be loaded.`
+          : `Pooled across all ${counts.n} published experiments; per-experiment rates differ.`}
       </p>
     </div>
   );

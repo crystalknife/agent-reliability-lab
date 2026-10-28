@@ -37,4 +37,21 @@ describe("hero chase simulation", () => {
     expect(inBounds).toBe(true);
     expect(maxCrawlerSpeed).toBeGreaterThan(70);
   });
+
+  it("crawler keeps moving after a capture instead of freezing through the slip", () => {
+    const sim = createChase(1);
+    let contact: { x: number; y: number } | null = null;
+    for (let i = 0; i < 60 * 60 && !contact; i++) {
+      sim.step(1 / 60);
+      const s = sim.snapshot();
+      if (s.mode === "tag") contact = s.crawler;
+    }
+    expect(contact).not.toBeNull();
+    if (!contact) return;
+    // Tag lasts 0.7s, then the crawler should break away during the slip.
+    for (let i = 0; i < 84; i++) sim.step(1 / 60);
+    const after = sim.snapshot();
+    const moved = Math.hypot(after.crawler.x - contact.x, after.crawler.y - contact.y);
+    expect(moved).toBeGreaterThan(20);
+  });
 });
