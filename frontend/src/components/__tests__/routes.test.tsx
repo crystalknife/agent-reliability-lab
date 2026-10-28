@@ -5,14 +5,15 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataUrl } from "../../lib/load";
 import {
   DashboardPage, ExperimentPage, ExperimentsPage, TaskPage, TrialsPage, TrialPage,
 } from "../../pages/pages";
+import { HomePage } from "../../pages/Home";
 
 const DATA = join(process.cwd(), "public", "data");
 
@@ -34,6 +35,7 @@ beforeAll(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  window.history.replaceState(null, "", "/");
 });
 
 function at(path: string, el: React.ReactNode) {
@@ -42,7 +44,8 @@ function at(path: string, el: React.ReactNode) {
 
 const routes = (
   <>
-    <Route path="/" element={<DashboardPage />} />
+    <Route path="/" element={<HomePage />} />
+    <Route path="/dashboard" element={<DashboardPage />} />
     <Route path="/experiments" element={<ExperimentsPage />} />
     <Route path="/experiments/:id" element={<ExperimentPage />} />
     <Route path="/experiments/:id/tasks/:taskId" element={<TaskPage />} />
@@ -51,9 +54,24 @@ const routes = (
   </>
 );
 
+describe("homepage", () => {
+  it("renders the Observatory landing with links to experiments and repo", async () => {
+    at("/", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("Making agent reliability measurable"));
+    expect(document.body.textContent).toContain("View all experiments");
+    expect(document.body.textContent).toContain("Explore the experiments");
+  });
+
+  it("replaces the old hero card with the pursuit scene", async () => {
+    at("/", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(screen.getByRole("img", { name: /tracking robot/i })).toBeTruthy());
+    expect(document.body.textContent).not.toContain("Reliability is more than a pass rate");
+  });
+});
+
 describe("routes render real EXP-001 data", () => {
   it("dashboard shows 25% reliability over 16 valid trials", async () => {
-    at("/", <Routes>{routes}</Routes>);
+    at("/dashboard", <Routes>{routes}</Routes>);
     await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
     expect(document.body.textContent).toContain("25%");
     expect(document.body.textContent).toContain("valid trials");
@@ -92,6 +110,93 @@ describe("routes render real EXP-001 data", () => {
     await waitFor(() => expect(screen.getByText("final answer", { exact: false })).toBeTruthy());
     expect(document.body.textContent).toContain("evaluator verdict");
     expect(document.body.textContent).toContain("provenance");
+  });
+});
+
+describe("navigation controls", () => {
+  const runId = () => {
+    const manifest = JSON.parse(readFileSync(join(DATA, "exp-001.json"), "utf-8"));
+    return manifest[0].run_id as string;
+  };
+
+  it("All Experiments button navigates to the experiments index", async () => {
+    at("/experiments/exp-001", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+    fireEvent.click(screen.getByRole("link", { name: "All Experiments" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Experiments" })).toBeTruthy());
+    expect(document.body.textContent).toContain("16 trials");
+  });
+
+  it("All Experiments button is present on the pilot detail page", async () => {
+    at("/experiments/exp-002", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("Five-arm comparison"));
+    expect(screen.getByRole("link", { name: "All Experiments" })).toBeTruthy();
+  });
+
+  it("Back returns to the previous in-app page when history exists", async () => {
+    window.history.replaceState({ idx: 0 }, "", "/");
+    window.history.pushState({ idx: 1 }, "", "/experiments/exp-001");
+    render(<BrowserRouter><Routes>{routes}</Routes></BrowserRouter>);
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("Making agent reliability measurable"));
+  });
+
+  it("Back from a directly opened experiment falls back to the experiments index", async () => {
+    at("/experiments/exp-001", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Experiments" })).toBeTruthy());
+  });
+
+  it("Back from a directly opened dashboard falls back to the homepage", async () => {
+    at("/dashboard", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("Making agent reliability measurable"));
+  });
+
+  it("Back from the experiments index reaches the homepage, which has no Back button", async () => {
+    at("/experiments", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Experiments" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("Making agent reliability measurable"));
+    expect(screen.queryByRole("button", { name: /back/i })).toBeNull();
+  });
+
+  it("Back from a directly opened task falls back to its experiment", async () => {
+    at("/experiments/exp-001/tasks/waiver-c101", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("waiver-c101"));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+  });
+
+  it("Back from the trial ledger falls back to its experiment", async () => {
+    at("/experiments/exp-001/trials", <Routes>{routes}</Routes>);
+    await waitFor(() => expect(screen.getByRole("tablist", { name: "Filter trials" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(document.body.textContent).toContain("Local Qwen3-4B Baseline"));
+  });
+
+  it("Back from a directly opened trial falls back to the trial ledger", async () => {
+    at(`/experiments/exp-001/trials/${runId()}`, <Routes>{routes}</Routes>);
+    await waitFor(() => expect(document.body.textContent).toContain("evaluator verdict"));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(screen.getByRole("tablist", { name: "Filter trials" })).toBeTruthy());
+  });
+
+  it.each([
+    "/dashboard",
+    "/experiments",
+    "/experiments/exp-001",
+    "/experiments/exp-001/trials",
+    "/experiments/exp-001/tasks/waiver-c101",
+  ])("Home link is present on %s", (path) => {
+    at(path, <Routes>{routes}</Routes>);
+    expect(screen.getByRole("link", { name: "Home" }).getAttribute("href")).toBe("/");
   });
 });
 

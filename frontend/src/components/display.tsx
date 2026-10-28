@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { Pill, Tip } from "./anim/primitives";
@@ -112,4 +112,44 @@ export function Meta({ label, value, tip }: { label: string; value: string; tip?
 
 export function Empty({ what }: { what: string }) {
   return <p className="card-flat p-6 font-mono text-sm text-[var(--color-ink-faint)]">No {what} in this experiment.</p>;
+}
+
+/** True when the browser history has an in-app entry behind the current one.
+ *  React Router tracks its stack position in window.history.state.idx, which
+ *  starts at 0 on direct entry — so idx > 0 means Back stays inside the app. */
+export function hasInAppHistory(): boolean {
+  const s = window.history.state as { idx?: number } | null;
+  return typeof s?.idx === "number" && s.idx > 0;
+}
+
+/** Consistent Back control: browser history when it stays in-app,
+ *  otherwise the given in-app fallback. Never strands deep-link visitors. */
+export function BackButton({ to, children }: { to: string; children?: ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (hasInAppHistory()) navigate(-1);
+        else navigate(to);
+      }}
+      className="card-flat inline-flex w-fit items-center gap-1.5 px-3 py-1.5 font-mono text-xs text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-deep)] hover:text-[var(--color-ink)]"
+    >
+      <span aria-hidden="true">← </span>Back
+      {children ? <span className="text-[var(--color-ink-faint)]"> · {children}</span> : null}
+    </button>
+  );
+}
+
+/** Styled entry point to the experiments index. */
+export function AllExperimentsButton() {
+  return (
+    <Link
+      to="/experiments"
+      aria-label="All Experiments"
+      className="card-flat inline-flex w-fit items-center gap-2 px-4 py-2 font-mono text-xs font-bold hover:bg-[var(--color-paper-deep)]"
+    >
+      <span aria-hidden="true">←</span>All Experiments
+    </Link>
+  );
 }

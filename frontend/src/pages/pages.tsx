@@ -4,7 +4,7 @@ import { agentReliability } from "../lib/selectors";
 import { LabShell } from "../layouts/LabShell";
 import { DashboardBody } from "../components/Dashboard";
 import { Exp002Page } from "../components/Exp002";
-import { Empty, Reveal, SectionTitle } from "../components/display";
+import { Empty, Reveal, SectionTitle, BackButton, AllExperimentsButton } from "../components/display";
 import { Tabs } from "../components/anim/primitives";
 import { StepTimeline, FinalCard, TrialLinkRow, VerdictPanel } from "../components/trajectory";
 import { FailurePill, Meta, PassPill, StatusPill } from "../components/display";
@@ -18,18 +18,18 @@ function Failed({ error }: { error: string }) {
   return <p className="card-flat p-6 font-mono text-sm text-[var(--color-brick)]">Could not load: {error}</p>;
 }
 
-/** / — latest experiment dashboard. */
+/** /dashboard — latest experiment dashboard. */
 export function DashboardPage() {
   const { entries, error } = useManifest();
   if (error) return <LabShell><Failed error={error} /></LabShell>;
   if (!entries) return <LabShell><Loading what="experiment index" /></LabShell>;
   if (entries.length === 0) return <LabShell><Empty what="experiments — run `npm run data` first" /></LabShell>;
-  return <ExperimentPage id={entries[0].id} />;
+  return <ExperimentPage id={entries[0].id} backTo="/" />;
 }
 
 /** /experiments/:id — dashboard scoped to one experiment. The pilot report
  *  has its own page; every other experiment uses the trial dashboard. */
-export function ExperimentPage({ id: propId }: { id?: string }) {
+export function ExperimentPage({ id: propId, backTo = "/experiments" }: { id?: string; backTo?: string }) {
   const params = useParams();
   const id = propId ?? params.id;
   const { bundle, error } = useExperiment(id);
@@ -39,7 +39,11 @@ export function ExperimentPage({ id: propId }: { id?: string }) {
     if (!pilot) return <LabShell><Loading what="experiment index" /></LabShell>;
     return (
       <LabShell>
-        <Exp002Page entry={pilot} />
+        <div className="flex flex-wrap items-center gap-3">
+          <BackButton to={backTo} />
+          <AllExperimentsButton />
+        </div>
+        <div className="mt-2"><Exp002Page entry={pilot} /></div>
       </LabShell>
     );
   }
@@ -47,7 +51,11 @@ export function ExperimentPage({ id: propId }: { id?: string }) {
   if (!bundle) return <LabShell><Loading what={`experiment ${id}`} /></LabShell>;
   return (
     <LabShell>
-      <DashboardBody bundle={bundle} />
+      <div className="flex flex-wrap items-center gap-3">
+        <BackButton to={backTo} />
+        <AllExperimentsButton />
+      </div>
+      <div className="mt-2"><DashboardBody bundle={bundle} /></div>
     </LabShell>
   );
 }
@@ -57,6 +65,7 @@ export function ExperimentsPage() {
   const { entries, error } = useManifest();
   return (
     <LabShell>
+      <div className="mb-4"><BackButton to="/" /></div>
       <SectionTitle index="00" title="Experiments" hint={`${entries?.length ?? 0} artifacts`} />
       {error && <Failed error={error} />}
       {!entries && <Loading what="experiments" />}
@@ -97,7 +106,7 @@ export function TaskPage() {
   const rel = agentReliability(trials);
   return (
     <LabShell>
-      <Link to={`/experiments/${id}`} className="font-mono text-xs text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]">← {id}</Link>
+      <BackButton to={`/experiments/${id}`}>{id}</BackButton>
       <h2 className="font-display mt-2 text-4xl font-bold tracking-tight">{taskId}</h2>
       <p className="tnum mt-1 font-mono text-xs text-[var(--color-ink-faint)]">
         {trials.length} trials · reliability {(rel.success_rate * 100).toFixed(0)}% over {rel.n} valid
@@ -145,7 +154,7 @@ export function TrialsPage() {
   ];
   return (
     <LabShell>
-      <Link to={`/experiments/${id}`} className="font-mono text-xs text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]">← {id}</Link>
+      <BackButton to={`/experiments/${id}`}>{id}</BackButton>
       <h2 className="font-display mt-2 text-4xl font-bold tracking-tight">Trials</h2>
       <div className="mt-4"><Tabs tabs={tabs} value={tab} onChange={(t) => set("tab", t === "all" ? null : t)} label="Filter trials" /></div>
       {(difficulty || failure) && (
@@ -185,7 +194,7 @@ export function TrialPage() {
   if (!row || !traj) return <LabShell><Empty what={`trial ${shortId(runId ?? "")}`} /></LabShell>;
   return (
     <LabShell>
-      <Link to={`/experiments/${id}/trials`} className="font-mono text-xs text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]">← all trials</Link>
+      <BackButton to={`/experiments/${id}/trials`}>all trials</BackButton>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="font-display min-w-0 break-words text-3xl font-bold tracking-tight sm:text-4xl">{row.task_id}</h2>
         <span className="flex flex-wrap items-center gap-2">
