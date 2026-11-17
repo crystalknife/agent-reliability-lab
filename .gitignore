@@ -45,3 +45,8 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# Local tool and assistant artifacts (not research evidence)
+.playwright-mcp/
+Claude outputs/
+frontend/e2e-output/

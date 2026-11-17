@@ -16,6 +16,10 @@ const TrialPage = React.lazy(() =>
   import("./pages/pages").then((m) => ({ default: m.TrialPage })));
 const HomePage = React.lazy(() =>
   import("./pages/Home").then((m) => ({ default: m.HomePage })));
+const LiveOverviewPage = React.lazy(() =>
+  import("./live/LivePages").then((m) => ({ default: m.LiveOverviewPage })));
+const LiveRunPage = React.lazy(() =>
+  import("./live/LivePages").then((m) => ({ default: m.LiveRunPage })));
 
 function Loading() {
   return <p className="p-8 font-mono text-sm">Loading view…</p>;
@@ -34,6 +38,8 @@ export function App() {
             <Route path="/experiments/:id/tasks/:taskId" element={<TaskPage />} />
             <Route path="/experiments/:id/trials" element={<TrialsPage />} />
             <Route path="/experiments/:id/trials/:runId" element={<TrialPage />} />
+            <Route path="/live" element={<LiveOverviewPage />} />
+            <Route path="/live/runs/:id" element={<LiveRunPage />} />
             <Route path="*" element={<DashboardPage />} />
           </Routes>
         </React.Suspense>
