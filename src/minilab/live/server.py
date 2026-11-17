@@ -21,12 +21,14 @@ import argparse
 import json
 import mimetypes
 import os
+import re
+import socket
 import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .analytics import compare_experiments, experiment_analytics, task_info
 from .store import RunStore, recording_integrity
@@ -80,7 +82,14 @@ def public_experiment(exp, now):
 
 class LiveServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # POSIX SO_REUSEADDR only permits rebinding over TIME_WAIT. On Windows it lets a second
+    # socket bind a port that is in use, so there the bind asks for exclusive use instead.
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):  # Windows only
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     def __init__(self, addr, store, *, enable_synthetic=False, static_dir=None,
                  heartbeat_s=10.0, poll_s=0.25, repo_root=None):
@@ -310,13 +319,22 @@ class Handler(BaseHTTPRequestHandler):
         root = self.server.static_dir
         if root is None:
             return self._not_found()
-        if path.lower().endswith(".traj.json"):
+        refused = {"error": "raw trajectory exports are not served by the live service"}
+        segments = [s for s in re.split(r"[\\/]", unquote(path)) if s]
+        # Windows drops trailing dots and spaces from names and reads "name:stream" as an NTFS
+        # stream, so such a segment can open a file the name checks never saw; "." and ".."
+        # end in a dot too. None of these is a legitimate asset path.
+        if any(s[-1] in ". " or ":" in s or "\0" in s for s in segments):
+            return self._json(403, {"error": "forbidden"})
+        if segments and segments[-1].lower().endswith(".traj.json"):
             # Legacy raw-trajectory exports may sit in a built frontend's data
             # folder (owner decision U9 is open). This service never serves them.
-            return self._json(403, {"error": "raw trajectory exports are not served by the live service"})
-        target = (root / path.lstrip("/")).resolve()
+            return self._json(403, refused)
+        target = root.joinpath(*segments).resolve()
         if root not in target.parents and target != root:
             return self._json(403, {"error": "forbidden"})
+        if target.name.lower().endswith(".traj.json"):  # the file actually reached (links, short names)
+            return self._json(403, refused)
         if not target.is_file():
             target = root / "index.html"          # SPA fallback
             if not target.is_file():
@@ -340,8 +358,12 @@ def main(argv=None):
                     help="allow POST /api/dev/synthetic-run (development only)")
     ap.add_argument("--static", default=None, help="serve a built frontend from this directory")
     a = ap.parse_args(argv)
-    server = LiveServer((a.host, a.port), RunStore(a.db), enable_synthetic=a.enable_synthetic,
-                        static_dir=a.static)
+    try:
+        server = LiveServer((a.host, a.port), RunStore(a.db), enable_synthetic=a.enable_synthetic,
+                            static_dir=a.static)
+    except OSError as e:
+        raise SystemExit(f"cannot listen on {a.host}:{a.port} ({e.strerror or e}); "
+                         "is another live server already running on this port?") from e
     print(f"ARL live API on http://{a.host}:{server.server_address[1]} (loopback only; no authentication)")
     try:
         server.serve_forever()

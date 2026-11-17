@@ -5,6 +5,7 @@ files). No provider is called; nothing is written to results/.
 """
 
 import json
+import os
 import socket
 import tempfile
 import threading
@@ -738,8 +739,10 @@ class TestStaticServing(unittest.TestCase):
                 base = f"http://127.0.0.1:{server.server_address[1]}"
                 self.assertIn("app", urllib.request.urlopen(base + "/").read().decode())
                 self.assertIn("app", urllib.request.urlopen(base + "/live/some/route").read().decode())
-                body = urllib.request.urlopen(base + "/..%2Fsecret.txt").read().decode()
-                self.assertNotIn("nope", body)
+                with self.assertRaises(urllib.error.HTTPError) as ctx:  # traversal is refused outright
+                    urllib.request.urlopen(base + "/..%2Fsecret.txt")
+                self.assertEqual(ctx.exception.code, 403)
+                self.assertNotIn("nope", ctx.exception.read().decode())
                 (root / "data").mkdir()
                 (root / "data" / "exp-x.traj.json").write_text('[{"raw_history": "RAW"}]')
                 (root / "data" / "exp-x.json").write_text('[{"task_id": "t"}]')
@@ -751,6 +754,188 @@ class TestStaticServing(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 th.join(5)
+
+
+RAW_MARKER = "RAW_TRAJECTORY_MARKER"
+SECRET_MARKER = "OUTSIDE_STATIC_ROOT"
+
+
+class TestStaticTrajectoryRefusal(unittest.TestCase):
+    """The raw-trajectory refusal and root confinement hold for every spelling of a path.
+
+    Requests go over a raw socket so the client does not normalise the path first.
+    """
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        outer = Path(self.td.name)
+        self.root = outer / "dist"
+        (self.root / "data").mkdir(parents=True)
+        (self.root / "assets").mkdir()
+        (self.root / "index.html").write_text("<html>app</html>")
+        (self.root / "assets" / "app.js").write_text("console.log('asset')")
+        (self.root / "data" / "exp-x.json").write_text('[{"task_id": "t"}]')
+        (self.root / "data" / "exp y.json").write_text('[{"task_id": "spaced"}]')
+        self.traj = self.root / "data" / "exp-x.traj.json"
+        self.traj.write_text(f'[{{"{RAW_MARKER}": true}}]')
+        (outer / "secret.txt").write_text(SECRET_MARKER)
+        self.server = LiveServer(("127.0.0.1", 0), RunStore(outer / "db.sqlite"), static_dir=self.root)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(5)
+        self.td.cleanup()
+
+    def raw_get(self, path):
+        with socket.create_connection(self.server.server_address[:2], timeout=10) as s:
+            s.sendall(f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".encode())
+            buf = b""
+            while chunk := s.recv(65536):
+                buf += chunk
+        return int(buf.split(b" ", 2)[1]), buf.partition(b"\r\n\r\n")[2].decode(errors="replace")
+
+    def assert_refused(self, path, marker=RAW_MARKER):
+        status, body = self.raw_get(path)
+        self.assertEqual(status, 403, f"{path!r} -> {status}")
+        self.assertNotIn(marker, body, path)
+
+    def test_direct_requests_are_refused(self):
+        for p in ("/data/exp-x.traj.json", "/data/EXP-X.TRAJ.JSON", "/data/missing.traj.json"):
+            with self.subTest(p=p):
+                self.assert_refused(p)
+
+    def test_demonstrated_bypasses_are_refused(self):
+        # /. works on every OS (pathlib drops it); the trailing dot and ::$DATA are
+        # Windows name normalisation and NTFS stream syntax. All must be refused everywhere.
+        for p in ("/data/exp-x.traj.json/.", "/data/exp-x.traj.json.", "/data/exp-x.traj.json::$DATA"):
+            with self.subTest(p=p):
+                self.assert_refused(p)
+
+    def test_normalisation_variants_are_refused(self):
+        # A literal space cannot be sent: it splits the request line and the stdlib answers 400
+        # before any handler runs. The encoded forms (%20) are covered below.
+        for p in ("/data/exp-x.traj.json.%20.", "/data/exp-x.traj.json/",
+                  "/data/exp-x.traj.json//", "/data/exp-x.traj.json/./", "//data//exp-x.traj.json",
+                  "/data/./exp-x.traj.json", "/assets/../data/exp-x.traj.json",
+                  "/data\\exp-x.traj.json", "/data/exp-x.traj.json:x", "/data/exp-x.traj.json:$DATA"):
+            with self.subTest(p=p):
+                self.assert_refused(p)
+
+    def test_url_encoded_variants_are_refused(self):
+        for p in ("/data/exp-x.traj%2ejson", "/data/exp-x%2Etraj%2Ejson", "/data%2fexp-x.traj.json",
+                  "/data%5cexp-x.traj.json", "/data/exp-x.traj.json%2e", "/data/exp-x.traj.json%20",
+                  "/data/exp-x.traj.json%2f.", "/data/exp-x.traj.json%3a%3a$DATA",
+                  "/data/exp-x.traj.json%00", "/%64ata/exp-x.traj.json"):
+            with self.subTest(p=p):
+                self.assert_refused(p)
+
+    def test_traversal_out_of_the_root_is_refused(self):
+        for p in ("/../secret.txt", "/..%2fsecret.txt", "/%2e%2e/secret.txt", "/%2e%2e%2fsecret.txt",
+                  "/..\\secret.txt", "/..%5csecret.txt", "/data/../../secret.txt", "/assets/..%2f..%2fsecret.txt",
+                  "/C:/Windows/win.ini", "/C:%5cWindows%5cwin.ini", f"/{self.td.name}/secret.txt"):
+            with self.subTest(p=p):
+                status, body = self.raw_get(p)
+                self.assertNotIn(SECRET_MARKER, body, p)
+                self.assertIn(status, (403,) if (".." in p or "%2e" in p or ":" in p) else (200, 403), p)
+
+    def test_a_directory_link_cannot_escape_the_root(self):
+        out = self.root / "out"
+        try:
+            out.symlink_to(Path(self.td.name), target_is_directory=True)
+        except OSError:
+            if os.name != "nt":
+                raise
+            import _winapi  # a junction needs no privilege on Windows
+            _winapi.CreateJunction(self.td.name, str(out))
+        self.assert_refused("/out/secret.txt", marker=SECRET_MARKER)
+        self.assert_refused("/out/dist/data/exp-x.traj.json")
+
+    def test_a_file_link_cannot_reach_a_trajectory(self):
+        try:
+            (self.root / "data" / "alias.json").symlink_to(self.traj)
+        except OSError as e:  # Windows without the symbolic-link privilege
+            self.skipTest(f"symbolic links unavailable: {e}")
+        self.assert_refused("/data/alias.json")
+
+    @unittest.skipUnless(os.name == "nt", "8.3 short names exist only on Windows")
+    def test_windows_short_name_cannot_reach_a_trajectory(self):
+        import ctypes
+        buf = ctypes.create_unicode_buffer(1024)
+        n = ctypes.windll.kernel32.GetShortPathNameW(str(self.traj), buf, len(buf))
+        short = Path(buf.value).name if n else ""
+        if not short or short.lower() == self.traj.name.lower():
+            self.skipTest("8.3 short names are disabled on this volume")
+        self.assert_refused(f"/data/{short}")
+
+    def test_ordinary_assets_are_still_served(self):
+        for p, expected in (("/", "app"), ("/index.html", "app"), ("/assets/app.js", "asset"),
+                            ("/data/exp-x.json", "task_id"), ("/data/exp%20y.json", "spaced"),
+                            ("/live/runs/abc", "app")):
+            with self.subTest(p=p):
+                status, body = self.raw_get(p)
+                self.assertEqual(status, 200, p)
+                self.assertIn(expected, body, p)
+
+
+class TestExclusivePort(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.first = LiveServer(("127.0.0.1", 0), RunStore(Path(self.td.name) / "a.sqlite"))
+        self.port = self.first.server_address[1]
+        self.thread = threading.Thread(target=self.first.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.first.shutdown()
+        self.first.server_close()
+        self.thread.join(5)
+        self.td.cleanup()
+
+    def health(self):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/health", timeout=10) as r:
+            return r.status, json.loads(r.read())
+
+    def test_second_server_on_the_same_port_fails_and_the_first_keeps_serving(self):
+        # On Windows this used to succeed silently (SO_REUSEADDR) while requests kept going
+        # to the first server.
+        with self.assertRaises(OSError):
+            LiveServer(("127.0.0.1", self.port), RunStore(Path(self.td.name) / "b.sqlite"),
+                       enable_synthetic=True)
+        status, body = self.health()
+        self.assertEqual(status, 200)
+        self.assertFalse(body["synthetic_runs_enabled"])  # still the first server answering
+
+    def test_cli_reports_an_occupied_port_clearly(self):
+        from minilab.live.server import main
+        with self.assertRaises(SystemExit) as ctx:
+            main(["--port", str(self.port), "--db", str(Path(self.td.name) / "c.sqlite")])
+        self.assertIn(f"cannot listen on 127.0.0.1:{self.port}", str(ctx.exception.code))
+        self.assertEqual(self.health()[0], 200)
+
+    @unittest.skipUnless(os.name == "nt", "SO_EXCLUSIVEADDRUSE is Windows-only")
+    def test_windows_port_is_held_exclusively(self):
+        self.assertEqual(self.first.socket.getsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE), 1)
+        intruder = socket.socket()  # another program asking to share the port
+        try:
+            intruder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            with self.assertRaises(OSError):
+                intruder.bind(("127.0.0.1", self.port))
+        finally:
+            intruder.close()
+        self.assertEqual(self.health()[0], 200)
+
+    def test_port_can_be_reused_after_a_clean_stop(self):
+        self.health()                       # leave a closed connection behind (TIME_WAIT)
+        self.first.shutdown()
+        self.first.server_close()
+        self.thread.join(5)
+        self.first = LiveServer(("127.0.0.1", self.port), RunStore(Path(self.td.name) / "a.sqlite"))
+        self.thread = threading.Thread(target=self.first.serve_forever, daemon=True)
+        self.thread.start()
+        self.assertEqual(self.health()[0], 200)
 
 
 if __name__ == "__main__":
