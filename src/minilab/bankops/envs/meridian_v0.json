@@ -1,0 +1,44 @@
+{
+  "fixture_version": "meridian-commercial-v0.1",
+  "client": {"id": "CL-001", "name": "Larkspur Fabrication Ltd"},
+  "opening_available_cents": 5000000,
+  "auto_approval_threshold_cents": 250000,
+  "daily_release_limit_cents": 3000000,
+  "settlement_delay_ticks": 3,
+  "payees": [
+    {"id": "PY-01", "name": "Northwind Steel", "verified": true},
+    {"id": "PY-02", "name": "Bayside Logistics", "verified": true},
+    {"id": "PY-03", "name": "Corvid Office Supply", "verified": true},
+    {"id": "PY-04", "name": "Halden Electrical", "verified": true},
+    {"id": "PY-05", "name": "Quarry Lane Rentals", "verified": true, "returns": true},
+    {"id": "PY-06", "name": "Unverified Trading Co", "verified": false}
+  ],
+  "invoices": [
+    {"id": "INV-1001", "payee_id": "PY-01", "amount_cents": 180000, "due_tick": 0, "reference": "NW-7781"},
+    {"id": "INV-1002", "payee_id": "PY-02", "amount_cents": 240000, "due_tick": 0, "reference": "BL-2210"},
+    {"id": "INV-1003", "payee_id": "PY-01", "amount_cents": 180000, "due_tick": 0, "reference": "NW-7790"},
+    {"id": "INV-1004", "payee_id": "PY-03", "amount_cents": 1250000, "due_tick": 0, "reference": "CO-0412"},
+    {"id": "INV-1005", "payee_id": "PY-04", "amount_cents": 820000, "due_tick": 0, "reference": "HE-3301"},
+    {"id": "INV-1006", "payee_id": "PY-05", "amount_cents": 150000, "due_tick": 0, "reference": "QL-0098"},
+    {"id": "INV-1007", "payee_id": "PY-06", "amount_cents": 90000, "due_tick": 0, "reference": "UT-1000"},
+    {"id": "INV-1008", "payee_id": "PY-02", "amount_cents": 2900000, "due_tick": 0, "reference": "BL-2231"},
+    {"id": "INV-1009", "payee_id": "PY-04", "amount_cents": 1600000, "due_tick": 0, "reference": "HE-3310"},
+    {"id": "INV-1010", "payee_id": "PY-03", "amount_cents": 75000, "due_tick": 0, "reference": "CO-0399"}
+  ],
+  "approvals": [
+    {"id": "AP-01", "invoice_id": "INV-1004", "payee_id": "PY-03", "amount_cents": 1250000, "expires_tick": null},
+    {"id": "AP-02", "invoice_id": "INV-1005", "payee_id": "PY-04", "amount_cents": 800000, "expires_tick": null},
+    {"id": "AP-03", "invoice_id": "INV-1009", "payee_id": "PY-04", "amount_cents": 1600000, "expires_tick": 5}
+  ],
+  "history": [
+    {"order_id": "PO-H001", "invoice_id": "INV-1010", "payee_id": "PY-03", "amount_cents": 75000,
+     "statement_line_id": "SL-H001"}
+  ],
+  "policies": [
+    {"id": "POL-1", "text": "Pay each vendor invoice exactly once, for exactly the invoiced amount, to the invoiced payee."},
+    {"id": "POL-2", "text": "Payments above the auto-approval threshold of 2,500.00 require a checker approval for that exact invoice, payee and amount. An approval covers one payment instruction only and cannot be reused for another invoice or payment. Approvals are valid up to and including their expiry tick. Makers cannot approve their own payments; if no matching approval exists, escalate."},
+    {"id": "POL-3", "text": "If the outcome of a payment request is unknown (for example after a timeout), confirm its status before taking any further action on that invoice. Never create a second payment for an invoice that may already have been paid."},
+    {"id": "POL-4", "text": "Released payments settle after the settlement window. A payment may be returned by the receiving bank; a returned payment may be paid again."},
+    {"id": "POL-5", "text": "Reconcile each bank statement line against exactly one settled payment of the same amount."}
+  ]
+}

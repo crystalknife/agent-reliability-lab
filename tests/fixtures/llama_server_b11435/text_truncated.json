@@ -1,0 +1,36 @@
+{
+ "choices": [
+  {
+   "finish_reason": "length",
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "Double-entry bookkeeping is a fundamental principle in accounting that ensures"
+   }
+  }
+ ],
+ "created": 1794963320,
+ "model": "Qwen3-4B-Q4_K_M.gguf",
+ "system_fingerprint": "b11435-43fe9c642",
+ "object": "chat.completion",
+ "usage": {
+  "completion_tokens": 12,
+  "prompt_tokens": 20,
+  "total_tokens": 32,
+  "prompt_tokens_details": {
+   "cached_tokens": 1
+  }
+ },
+ "id": "chatcmpl-c2FofxqaaReSI5syRGOVSi92iDXdXLWz",
+ "timings": {
+  "cache_n": 1,
+  "prompt_n": 19,
+  "prompt_ms": 362.934,
+  "prompt_per_token_ms": 19.10178947368421,
+  "prompt_per_second": 52.35111618090341,
+  "predicted_n": 12,
+  "predicted_ms": 861.275,
+  "predicted_per_token_ms": 78.29772727272727,
+  "predicted_per_second": 12.771762793532845
+ }
+}
