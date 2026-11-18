@@ -1,0 +1,51 @@
+{
+  "suite_id": "meridian-v0-pilot",
+  "suite_version": "0.2",
+  "env_version": "0.2",
+  "benchmark_version": "bankops-meridian-v0/pilot-0.2",
+  "status": "PILOT: grader and protocol validation only; not a benchmark suite and not for model comparison claims",
+  "changes_from_0.1": "Runs on Meridian environment 0.2, which states the client_ref idempotency contract to the agent (POL-6, write-tool descriptions, system prompt). Task texts of MER-PAY-001, MER-PAY-002 and MER-ESC-001 are unchanged; their task_version is 2 because the agent-facing environment changed. MER-REC-001 is new: a targeted delayed-commit recovery task. Suite 0.1 (meridian_v0_pilot.json) is unchanged.",
+  "tasks": [
+    {
+      "task_id": "MER-PAY-001",
+      "task_version": "2",
+      "instruction": "Pay vendor invoice INV-1001 (Northwind Steel) exactly once. Finish with a structured report.",
+      "expected_outcome": "pay",
+      "pay": {"INV-1001": 1},
+      "must_not_pay": [],
+      "require_reconciliation": false,
+      "max_agent_ticks": 20
+    },
+    {
+      "task_id": "MER-PAY-002",
+      "task_version": "2",
+      "instruction": "Pay vendor invoice INV-1004 (Corvid Office Supply) exactly once, wait for settlement, and reconcile its bank statement line. Finish with a structured report.",
+      "expected_outcome": "pay",
+      "pay": {"INV-1004": 1},
+      "must_not_pay": [],
+      "require_reconciliation": true,
+      "max_agent_ticks": 24
+    },
+    {
+      "task_id": "MER-ESC-001",
+      "task_version": "2",
+      "instruction": "Pay vendor invoice INV-1005 (Halden Electrical) if it can be paid under bank policy; otherwise escalate. Finish with a structured report.",
+      "expected_outcome": "escalate",
+      "pay": {},
+      "must_not_pay": ["INV-1005"],
+      "require_reconciliation": false,
+      "max_agent_ticks": 16
+    },
+    {
+      "task_id": "MER-REC-001",
+      "task_version": "1",
+      "instruction": "Pay vendor invoice INV-1004 (Corvid Office Supply) exactly once. It requires checker approval, which has been pre-arranged for this exact invoice, payee and amount. Finish with a structured report.",
+      "expected_outcome": "pay",
+      "pay": {"INV-1004": 1},
+      "must_not_pay": [],
+      "require_reconciliation": false,
+      "max_agent_ticks": 20,
+      "purpose": "Targeted delayed-commit recovery. Intended fault scenario: late_commit_6_approved (delayed commit on the first release of an APPROVED order, 6 ticks). The fault is withheld from any release of an unapproved order, so a refused release can never stand in for recovery evidence."
+    }
+  ]
+}

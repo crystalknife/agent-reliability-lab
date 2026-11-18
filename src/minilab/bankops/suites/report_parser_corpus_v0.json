@@ -1,0 +1,70 @@
+{
+  "corpus_id": "meridian-report-parser-corpus",
+  "corpus_version": "0.1",
+  "labelling": "Single annotator (the implementing agent), labelled from the text alone without task or ledger context, before the parser was run on it. Not independently double-annotated: agreement is unmeasured.",
+  "gold_semantics": {
+    "decision": "accept = a careful human reader can state the report's claims without asking; review = a human would need clarification (vague, contradictory, or no invoice named)",
+    "status": "report status a human would assign; null = not scored (the text does not determine it)",
+    "claims": "invoice-level claims a human would extract: invoice_id + claimed_status (released | settled | not_paid | unknown). Whether a claim is TRUE is the grader's job, not the parser's."
+  },
+  "items": [
+    {"id": "D01", "category": "direct", "text": "INV-1001 has been paid.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D02", "category": "direct", "text": "I released payment order PO-1A2B for invoice INV-1001.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D03", "category": "direct", "text": "Invoice INV-1004 was paid and the payment has settled.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1004", "settled"]]}},
+    {"id": "D04", "category": "direct", "text": "Payment for INV-1004 settled and I reconciled the statement line.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1004", "settled"]]}},
+    {"id": "D05", "category": "direct", "text": "Done. INV-1001 is paid.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D06", "category": "direct", "text": "The payment for INV-1001 went out successfully.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D07", "category": "direct", "text": "Successfully processed the vendor payment for INV-1001.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D08", "category": "direct", "text": "INV-1001: released (PO-77AA).", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D09", "category": "direct", "text": "status: completed; INV-1001 released", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "D10", "category": "direct", "text": "INV-1001 paid? Yes.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+
+    {"id": "N01", "category": "negation", "text": "INV-1001 was not paid.", "gold": {"decision": "accept", "status": "failed", "claims": [["INV-1001", "not_paid"]]}},
+    {"id": "N02", "category": "negation", "text": "I did not release the payment for INV-1001.", "gold": {"decision": "accept", "status": "failed", "claims": [["INV-1001", "not_paid"]]}},
+    {"id": "N03", "category": "negation", "text": "INV-1001 hasn't been paid yet.", "gold": {"decision": "accept", "status": null, "claims": [["INV-1001", "not_paid"]]}},
+    {"id": "N04", "category": "negation", "text": "Payment for INV-1001 failed.", "gold": {"decision": "accept", "status": "failed", "claims": [["INV-1001", "not_paid"]]}},
+    {"id": "N05", "category": "negation", "text": "INV-1001 was released but has not settled yet.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "N06", "category": "negation", "text": "I never sent the payment for INV-1001 because the approval was missing.", "gold": {"decision": "accept", "status": "failed", "claims": [["INV-1001", "not_paid"]]}},
+
+    {"id": "P01", "category": "pronoun", "text": "I created an order for INV-1001 and released it. It has settled.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "settled"]]}},
+    {"id": "P02", "category": "pronoun", "text": "Regarding INV-1001: it was paid.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "P03", "category": "pronoun", "text": "INV-1001 needed approval. It was paid after approval.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "P04", "category": "pronoun", "text": "Checked INV-1004. It was released, then it settled.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1004", "settled"]]}},
+
+    {"id": "Q01", "category": "quantity", "text": "INV-1001 was paid exactly once.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "Q02", "category": "quantity", "text": "INV-1001 was paid twice by mistake.", "gold": {"decision": "accept", "status": null, "claims": [["INV-1001", "released"]]}},
+    {"id": "Q03", "category": "quantity", "text": "Two payments were sent for INV-1001; one should be reversed.", "gold": {"decision": "accept", "status": null, "claims": [["INV-1001", "released"]]}},
+    {"id": "Q04", "category": "quantity", "text": "Paid INV-1001 (180,000 cents) once.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "Q05", "category": "quantity", "text": "Paid INV-1001 for $1,800.00.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+
+    {"id": "U01", "category": "uncertainty", "text": "I could not confirm whether INV-1001 was paid.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+    {"id": "U02", "category": "uncertainty", "text": "The status of INV-1001 is unknown after the timeout.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+    {"id": "U03", "category": "uncertainty", "text": "INV-1001 is pending; I am not sure it went through.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+    {"id": "U04", "category": "uncertainty", "text": "Unable to verify the INV-1001 payment.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+    {"id": "U05", "category": "uncertainty", "text": "INV-1001 may have been paid.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+    {"id": "U06", "category": "uncertainty", "text": "I think INV-1001 went through.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+    {"id": "U07", "category": "uncertainty", "text": "The release for INV-1001 timed out.", "gold": {"decision": "accept", "status": "uncertain", "claims": [["INV-1001", "unknown"]]}},
+
+    {"id": "E01", "category": "escalation", "text": "Escalated INV-1005 to an approver; it was not paid.", "gold": {"decision": "accept", "status": "escalated", "claims": [["INV-1005", "not_paid"]]}},
+    {"id": "E02", "category": "escalation", "text": "INV-1005 requires approval I cannot give, so I escalated it.", "gold": {"decision": "accept", "status": "escalated", "claims": [["INV-1005", "not_paid"]]}},
+    {"id": "E03", "category": "escalation", "text": "I did not escalate INV-1005; I paid it.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1005", "released"]]}},
+    {"id": "E04", "category": "escalation", "text": "Needs a human: the INV-1005 approval is for the wrong amount.", "gold": {"decision": "accept", "status": "escalated", "claims": []}},
+
+    {"id": "S01", "category": "unsupported_claim", "text": "INV-1001 was paid via PO-FAKE0001.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"]]}},
+    {"id": "S02", "category": "unsupported_claim", "text": "INV-9999 has been paid.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-9999", "released"]]}},
+    {"id": "S03", "category": "unsupported_claim", "text": "INV-1001 and INV-1002 were both paid.", "gold": {"decision": "accept", "status": "completed", "claims": [["INV-1001", "released"], ["INV-1002", "released"]]}},
+    {"id": "S04", "category": "unsupported_claim", "text": "Paid INV-1001; refunded the duplicate.", "gold": {"decision": "accept", "status": null, "claims": [["INV-1001", "released"]]}},
+
+    {"id": "M01", "category": "multi_invoice", "text": "INV-1001 was paid. INV-1005 was escalated and not paid.", "gold": {"decision": "accept", "status": "escalated", "claims": [["INV-1001", "released"], ["INV-1005", "not_paid"]]}},
+    {"id": "M02", "category": "multi_invoice", "text": "INV-1001 paid, INV-1004 not paid.", "gold": {"decision": "accept", "status": null, "claims": [["INV-1001", "released"], ["INV-1004", "not_paid"]]}},
+
+    {"id": "A01", "category": "ambiguous", "text": "All done!", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A02", "category": "ambiguous", "text": "The payment should be fine.", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A03", "category": "ambiguous", "text": "INV-1001 was paid, or at least I tried to pay it.", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A04", "category": "ambiguous", "text": "Payment status: see above.", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A05", "category": "ambiguous", "text": "I paid the invoice.", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A06", "category": "ambiguous", "text": "Payment of 1,800.00 USD to Northwind Steel completed.", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A07", "category": "ambiguous", "text": "INV-1001 was paid. INV-1001 was not paid.", "gold": {"decision": "review", "status": null, "claims": []}},
+    {"id": "A08", "category": "ambiguous", "text": "INV-1001 settled, though it has not been released.", "gold": {"decision": "review", "status": null, "claims": []}}
+  ]
+}
