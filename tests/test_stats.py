@@ -53,6 +53,31 @@ class TestWilsonIntervalValidation(unittest.TestCase):
         with self.assertRaises(ValueError):
             wilson_interval(5, 10, confidence=0.80)
 
+    def test_near_miss_confidence_is_refused_not_rounded(self):
+        # PR #14 review F2: these used to be rounded to two decimals, so 0.9549 and 0.9949
+        # were silently computed with the 95% / 99% z while being labelled 0.9549 / 0.9949.
+        for c in (0.9549, 0.9949, 0.951, 0.949, 0.965, 0.945, 0.9551, 0.905, 0.95 + 1e-6):
+            with self.subTest(confidence=c), self.assertRaises(ValueError):
+                wilson_interval(1, 10, confidence=c)
+
+    def test_exact_supported_levels_are_unchanged(self):
+        expected_z = {0.90: 1.6448536269514722, 0.95: 1.9599639845400545, 0.99: 2.5758293035489004}
+        for c, z in expected_z.items():
+            with self.subTest(confidence=c):
+                iv = wilson_interval(3, 10, confidence=c)
+                p, z2, n = 0.3, z * z, 10
+                denom = 1 + z2 / n
+                center = (p + z2 / (2 * n)) / denom
+                half = z * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / denom
+                self.assertEqual((iv.lower, iv.upper), (center - half, center + half))
+                self.assertEqual(iv.confidence, c)
+
+    def test_float_representation_noise_is_the_same_level(self):
+        noisy = 0.9 + 0.05                       # 0.9500000000000001: the same level, not another
+        self.assertNotEqual(noisy, 0.95)
+        a, b = wilson_interval(3, 10, confidence=noisy), wilson_interval(3, 10, confidence=0.95)
+        self.assertEqual((a.lower, a.upper), (b.lower, b.upper))
+
 
 class TestWilsonIntervalAlgebraicIdentities(unittest.TestCase):
     """Properties provable directly from the Wilson score formula. Any one

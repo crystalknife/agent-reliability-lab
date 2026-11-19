@@ -39,23 +39,35 @@ class _PacedRecorder(LiveRecorder):
             time.sleep(self.delay_s)
 
 
+class InvalidSyntheticRequest(ValueError):
+    """A caller-supplied synthetic-run argument is invalid (raised before anything is stored).
+    Distinct from any other ValueError, which is an internal fault, not bad input."""
+
+
 def start_synthetic_run(store, *, model="scripted", task_ids=None, repeats=1, delay_s=0.0,
                         exec_mode="sequential", code_revision=None, fail_after=None):
     """Queue a synthetic run and execute it on a background thread.
     Returns (experiment_id, thread). fail_after=N makes the run raise after
-    N trials (to exercise the failed-run path)."""
+    N trials (to exercise the failed-run path). Invalid arguments raise
+    InvalidSyntheticRequest (a ValueError)."""
     if model not in SYNTHETIC_MODELS:
-        raise ValueError(f"synthetic runs use one of {SYNTHETIC_MODELS}, got {model!r}")
+        raise InvalidSyntheticRequest(f"synthetic runs use one of {SYNTHETIC_MODELS}, got {model!r}")
     known = [t["task_id"] for t in TASKS]
-    task_ids = list(task_ids or known)
+    try:
+        task_ids = list(task_ids or known)
+    except TypeError:
+        raise InvalidSyntheticRequest("task_ids must be a list of task ids") from None
     unknown = [t for t in task_ids if t not in known]
     if unknown:
-        raise ValueError(f"unknown task id(s): {unknown}")
+        raise InvalidSyntheticRequest(f"unknown task id(s): {unknown}")
     if not isinstance(repeats, int) or isinstance(repeats, bool) or not 1 <= repeats <= 20:
-        raise ValueError("repeats must be an int in [1, 20]")
-    delay_s = max(0.0, min(float(delay_s), MAX_DELAY_S))
+        raise InvalidSyntheticRequest("repeats must be an int in [1, 20]")
+    try:
+        delay_s = max(0.0, min(float(delay_s), MAX_DELAY_S))
+    except (TypeError, ValueError):
+        raise InvalidSyntheticRequest("delay_s must be a number") from None
     if exec_mode not in ("sequential", "batch"):
-        raise ValueError("exec_mode must be 'sequential' or 'batch'")
+        raise InvalidSyntheticRequest("exec_mode must be 'sequential' or 'batch'")
 
     experiment_id = f"synthetic-{uuid.uuid4()}"
     extra = {"code_revision": code_revision, "task_schema_version": TASK_SCHEMA_VERSION,
