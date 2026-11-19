@@ -669,7 +669,9 @@ def main():
                          "(no prompts, arguments, observations or answers) is "
                          "recorded there for the local live dashboard "
                          "(python -m minilab.live.server --db <same file>). "
-                         "Result and trajectory files are unaffected.")
+                         "Result and trajectory files are unaffected. Must be a plain "
+                         "file path: ':memory:' and SQLite URI names starting with "
+                         "'file:' (including file-backed ones) are refused.")
     ap.add_argument("--protocol-ref", default=None,
                     help="Protocol revision label to record in the run manifest, "
                          "exactly as given (e.g. EXP-005-protocol@3.1#<sha8>). "

@@ -105,14 +105,19 @@ class RunStore:
     def __init__(self, path, clock=time.time):
         self.path = str(path)
         self._clock = clock
-        if self.path in ("", ":memory:"):
+        if self.path in ("", ":memory:") or self.path.startswith("file:"):
             # SQLite gives every connection its own private database for these names, and
             # this store opens one connection per operation, so the tables created here would
             # be gone by the next call. The runner and the server also share records through
-            # the file. Refuse clearly instead of failing on every later request.
+            # the file. A name starting "file:" (lowercase, exactly as SQLite checks it) is read
+            # as a URI by SQLite builds compiled with SQLITE_USE_URI (e.g. Ubuntu's) even without
+            # uri=True, which admits in-memory forms (file::memory:, mode=memory, vfs=memdb);
+            # elsewhere it is an odd literal file name. Only plain file paths are supported.
+            # Refuse clearly instead of failing later.
             raise ValueError(f"RunStore needs a database file path, not {self.path!r}: "
                              "an in-memory or temporary SQLite database is private to one "
-                             "connection and cannot hold the shared run record")
+                             "connection and cannot hold the shared run record, and SQLite "
+                             "'file:' URI names are not supported (pass a plain file path)")
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(_SCHEMA)

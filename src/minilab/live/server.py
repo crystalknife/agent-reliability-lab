@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .analytics import compare_experiments, experiment_analytics, task_info
 from .store import RunStore, recording_integrity
-from .synthetic import start_synthetic_run
+from .synthetic import InvalidSyntheticRequest, start_synthetic_run
 
 LOOPBACK_BINDS = ("127.0.0.1", "localhost", "::1")
 # Outside the repository on purpose: run records must not be committed or
@@ -114,6 +114,12 @@ class LiveServer(ThreadingHTTPServer):
         super().shutdown()
 
 
+class BadRequest(Exception):
+    """Invalid client input, found by explicit request parsing. Answered with 400. Any other
+    exception, including a ValueError raised inside the server or the store, is an internal
+    fault and goes to the 500 boundary."""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ARLLive/" + API_VERSION
     protocol_version = "HTTP/1.1"
@@ -142,10 +148,18 @@ class Handler(BaseHTTPRequestHandler):
             return route()
         except (BrokenPipeError, ConnectionResetError):
             return None  # the client went away
+        except BadRequest:
+            if self._response_started:   # never write a second status into a started response
+                self.close_connection = True
+                return None
+            if self.command == "POST":   # raised before the body was read: drain it, then close
+                return self._reject(400, {"error": "bad request"})
+            return self._json(400, {"error": "bad request"})
         except Exception as e:  # noqa: BLE001 - deliberate request boundary, logged below
             self.close_connection = True
+            # Not urlparse: a malformed request target would make the boundary itself raise.
             sys.stderr.write(f"ARL live API: internal error on {self.command} "
-                             f"{urlparse(self.path).path}: {type(e).__name__}\n")
+                             f"{self.path.split('?', 1)[0]}: {type(e).__name__}\n")
             traceback.print_exc(file=sys.stderr)
             if not self._response_started:
                 try:
@@ -173,6 +187,26 @@ class Handler(BaseHTTPRequestHandler):
 
     def _not_found(self):
         self._json(404, {"error": "not found"})
+
+    def _target(self):
+        """The parsed request target; BadRequest if the client sent a malformed one."""
+        try:
+            return urlparse(self.path)
+        except ValueError:          # e.g. an absolute-form target with an invalid host part
+            raise BadRequest("malformed request target") from None
+
+    @staticmethod
+    def _after(q):
+        """The integer `after` query parameter (default 0); BadRequest otherwise."""
+        try:
+            after = int(q.get("after", ["0"])[0])
+        except ValueError:
+            raise BadRequest("'after' must be an integer") from None
+        # Event ids are SQLite INTEGERs (signed 64-bit); binding anything outside that range
+        # raises OverflowError, so such a value is a client error, not a server fault.
+        if not -2**63 <= after <= 2**63 - 1:
+            raise BadRequest("'after' is outside the event id range")
+        return after
 
     def _content_length(self):
         """The declared body length, or None when the framing is malformed or ambiguous."""
@@ -229,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
     def _get(self):
         if not self._host_ok():
             return self._json(403, {"error": "forbidden host"})
-        url = urlparse(self.path)
+        url = self._target()
         parts = [p for p in url.path.split("/") if p]
         q = parse_qs(url.query)
         store = self.server.store
@@ -264,12 +298,10 @@ class Handler(BaseHTTPRequestHandler):
                                             "trials": [dict(t, task=task_info(t["task_id"])) for t in trials],
                                             "analytics": experiment_analytics(trials, recording_integrity(exp))})
                 if parts[3:] == ["events"]:
-                    after = int(q.get("after", ["0"])[0])
-                    return self._json(200, {"events": store.events_after(after, parts[2])})
+                    return self._json(200, {"events": store.events_after(self._after(q), parts[2])})
                 return self._not_found()
             if parts == ["api", "events"]:
-                after = int(q.get("after", ["0"])[0])
-                return self._json(200, {"events": store.events_after(after)})
+                return self._json(200, {"events": store.events_after(self._after(q))})
             if parts == ["api", "compare"]:
                 a, b = q.get("a", [None])[0], q.get("b", [None])[0]
                 ea = store.get_experiment(a) if a else None
@@ -285,16 +317,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._not_found()
         except (BrokenPipeError, ConnectionResetError):
             return None
-        except ValueError:
-            if self._response_started:   # never write a second status into a started response
-                self.close_connection = True
-                return None
-            return self._json(400, {"error": "bad request"})
 
     def _post(self):
         if not self._host_ok():
             return self._reject(403, {"error": "forbidden host"})
-        if urlparse(self.path).path != "/api/dev/synthetic-run":
+        if self._target().path != "/api/dev/synthetic-run":
             return self._reject(404, {"error": "not found"})
         if not self.server.enable_synthetic:
             return self._reject(403, {"error": "synthetic runs are disabled (start with --enable-synthetic)"})
@@ -309,17 +336,23 @@ class Handler(BaseHTTPRequestHandler):
         if raw is None:
             self.close_connection = True
             return self._json(408, {"error": "request body incomplete"})
+        # Only the client's body and arguments are answered with 400; any other exception
+        # (a store or sanitizer fault, even a ValueError) reaches the 500 boundary.
         try:
-            body = json.loads(raw or b"{}")
+            body = json.loads(raw or b"{}")   # JSONDecodeError / UnicodeDecodeError: the client's body
             if not isinstance(body, dict):
                 raise TypeError("body must be a JSON object")
+        except (ValueError, TypeError) as e:
+            self.close_connection = True  # every rejected POST ends its connection
+            return self._json(400, {"error": f"bad request ({type(e).__name__})"})
+        try:
             eid, _ = start_synthetic_run(
                 self.server.store, model=body.get("model", "scripted"), task_ids=body.get("task_ids"),
                 repeats=body.get("repeats", 1), delay_s=body.get("delay_s", 0.0),
                 exec_mode=body.get("exec_mode", "sequential"), code_revision=self.server.revision,
                 fail_after=body.get("fail_after"))
-        except (ValueError, TypeError) as e:
-            self.close_connection = True  # every rejected POST ends its connection
+        except InvalidSyntheticRequest as e:
+            self.close_connection = True
             return self._json(400, {"error": f"bad request ({type(e).__name__})"})
         return self._json(202, {"experiment_id": eid, "kind": "synthetic"})
 
@@ -396,7 +429,9 @@ class Handler(BaseHTTPRequestHandler):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Local ARL live API (loopback only, no authentication).")
     ap.add_argument("--db", default=str(DEFAULT_DB),
-                    help="SQLite file for sanitized run records (default: outside the repository)")
+                    help="SQLite file for sanitized run records (default: outside the repository). "
+                         "Must be a plain file path: ':memory:', an empty name and SQLite URI "
+                         "names starting with 'file:' (including file-backed ones) are refused.")
     ap.add_argument("--host", default="127.0.0.1", choices=LOOPBACK_BINDS)
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--enable-synthetic", action="store_true",
