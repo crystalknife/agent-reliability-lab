@@ -10,8 +10,63 @@ a Trajectory, so the runner always has a row to write.
 import hashlib
 import json
 
-from .tools import TOOL_SCHEMAS, build_system_prompt, dispatch
+from .tools import TOOL_NAMES, TOOL_SCHEMAS, build_system_prompt, dispatch
 from .trajectory import Step, Trajectory
+
+
+def _fault(boundary, exc):
+    """Typed record of WHERE an exception was caught and WHAT it was, kept
+    beside the error text. `boundary` is the code location, which is known
+    exactly; whose fault it was is a separate question (see
+    failures.fault_origin). No message text is used for this."""
+    cls = type(exc)
+    bases = [b.__name__ for b in cls.__mro__[1:]
+             if b.__name__ not in ("object", "BaseException", "Exception")][:6]
+    record = {"boundary": boundary, "exception_type": cls.__name__,
+              "exception_module": cls.__module__ or "", "exception_bases": bases}
+    # HTTP status, when the exception object itself carries one (SDK
+    # response errors do). Read from the object, never parsed from text.
+    for attr in ("status_code", "code"):
+        status = getattr(exc, attr, None)
+        if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599:
+            record["http_status"] = status
+            break
+    return record
+
+
+_JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "array": list}
+
+
+def _arguments_conform(name, args):
+    """Do the arguments satisfy the tool's DECLARED schema (required params
+    present, declared types)? True / False, or None when the tool is unknown.
+    Used only to annotate a fault record; dispatch itself is unchanged. A
+    schema can be incomplete, so True does not prove the arguments were
+    sensible, only that they met what the agent was told."""
+    schema = next((t for t in TOOL_SCHEMAS if t["name"] == name), None)
+    if schema is None or not isinstance(args, dict):
+        return None
+    for param, spec in schema["params"].items():
+        if param not in args or args[param] is None:
+            if spec.get("required"):
+                return False
+            continue
+        value, expected = args[param], _JSON_TYPES.get(spec.get("type"))
+        if expected is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, expected):
+            return False
+        if spec.get("type") == "array" and spec.get("items", {}).get("type") == "number":
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+                return False
+    return True
+
+
+def _tool_fault(name, args, exc):
+    record = _fault("tool_dispatch", exc)
+    record["tool_known"] = name in TOOL_NAMES
+    record["arguments_schema_valid"] = _arguments_conform(name, args)
+    return record
 
 
 def _prompt_hash(prompt):
@@ -90,7 +145,8 @@ def run_agent(task_id, task_prompt, env, model_fn, max_steps=8, meta=None,
             out = model_fn(list(messages), TOOL_SCHEMAS, config)
         except Exception as e:  # noqa: BLE001 - model/API faults become data
             steps.append(Step(step=i, action="model_error", arguments={},
-                              observation={"error": f"model error: {e!r}"}))
+                              observation={"error": f"model error: {e!r}",
+                                           "fault": _fault("model_call", e)}))
             termination_reason = "model_error"
             break
         raw_history.append({"role": "assistant", "content": out})
@@ -103,7 +159,8 @@ def run_agent(task_id, task_prompt, env, model_fn, max_steps=8, meta=None,
         calls = _as_call_list(out)
         if calls is None:
             steps.append(Step(step=i, action="invalid_action", arguments={},
-                              observation={"error": f"invalid model output: {out!r}"}))
+                              observation={"error": f"invalid model output: {out!r}",
+                                           "fault": {"boundary": "model_output_validation"}}))
             termination_reason = "invalid_action"
             break
 
@@ -115,13 +172,15 @@ def run_agent(task_id, task_prompt, env, model_fn, max_steps=8, meta=None,
             try:
                 obs = dispatch(env, name, args)
             except ValueError as e:
-                steps.append(Step(step=i, action=name, arguments=args, observation={"error": str(e)}))
+                steps.append(Step(step=i, action=name, arguments=args,
+                                  observation={"error": str(e), "fault": _tool_fault(name, args, e)}))
                 termination_reason = "tool_error"
                 turn_failed = True
                 break
             except Exception as e:  # noqa: BLE001 - tool/infra faults terminate, never crash
                 steps.append(Step(step=i, action=name, arguments=args,
-                                  observation={"error": f"tool error: {e!r}"}))
+                                  observation={"error": f"tool error: {e!r}",
+                                               "fault": _tool_fault(name, args, e)}))
                 termination_reason = "tool_error"
                 turn_failed = True
                 break
