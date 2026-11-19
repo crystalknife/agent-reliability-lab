@@ -23,9 +23,12 @@ import mimetypes
 import os
 import re
 import socket
+import sqlite3
 import subprocess
+import sys
 import threading
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -115,8 +118,41 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "ARLLive/" + API_VERSION
     protocol_version = "HTTP/1.1"
 
+    _response_started = False
+
     def log_message(self, *a):  # quiet; the store is the record
         pass
+
+    def send_response(self, code, message=None):
+        self._response_started = True
+        super().send_response(code, message)
+
+    def _guarded(self, route):
+        """Run one request with a last-resort error boundary.
+
+        An unexpected exception (a store error, an unreadable static file) becomes a
+        generic 500 when no response has been started; once a status line has been
+        sent (e.g. an event stream is under way) the connection is closed instead,
+        because a second response cannot be written into the first. The client gets
+        no exception text, path or other detail; the traceback goes to the local
+        console of the person running the server.
+        """
+        self._response_started = False
+        try:
+            return route()
+        except (BrokenPipeError, ConnectionResetError):
+            return None  # the client went away
+        except Exception as e:  # noqa: BLE001 - deliberate request boundary, logged below
+            self.close_connection = True
+            sys.stderr.write(f"ARL live API: internal error on {self.command} "
+                             f"{urlparse(self.path).path}: {type(e).__name__}\n")
+            traceback.print_exc(file=sys.stderr)
+            if not self._response_started:
+                try:
+                    self._json(500, {"error": "internal server error"})
+                except OSError:
+                    pass
+            return None
 
     # -- helpers -----------------------------------------------------------
     def _host_ok(self):
@@ -185,6 +221,12 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routing -----------------------------------------------------------
     def do_GET(self):  # noqa: N802
+        return self._guarded(self._get)
+
+    def do_POST(self):  # noqa: N802
+        return self._guarded(self._post)
+
+    def _get(self):
         if not self._host_ok():
             return self._json(403, {"error": "forbidden host"})
         url = urlparse(self.path)
@@ -244,9 +286,12 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             return None
         except ValueError:
+            if self._response_started:   # never write a second status into a started response
+                self.close_connection = True
+                return None
             return self._json(400, {"error": "bad request"})
 
-    def do_POST(self):  # noqa: N802
+    def _post(self):
         if not self._host_ok():
             return self._reject(403, {"error": "forbidden host"})
         if urlparse(self.path).path != "/api/dev/synthetic-run":
@@ -359,7 +404,11 @@ def main(argv=None):
     ap.add_argument("--static", default=None, help="serve a built frontend from this directory")
     a = ap.parse_args(argv)
     try:
-        server = LiveServer((a.host, a.port), RunStore(a.db), enable_synthetic=a.enable_synthetic,
+        store = RunStore(a.db)
+    except (ValueError, sqlite3.Error, OSError) as e:
+        raise SystemExit(f"cannot use --db {a.db!r} as the run database: {e}") from e
+    try:
+        server = LiveServer((a.host, a.port), store, enable_synthetic=a.enable_synthetic,
                             static_dir=a.static)
     except OSError as e:
         raise SystemExit(f"cannot listen on {a.host}:{a.port} ({e.strerror or e}); "

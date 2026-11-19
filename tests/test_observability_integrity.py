@@ -331,6 +331,36 @@ class TestFailureModes(Base):
         self.assertEqual(existing.read_text(), "KEEP")
         self.assertEqual(len(res.read_text().splitlines()), 1)
 
+    def _cli(self, *extra):
+        out, err = io.StringIO(), io.StringIO()
+        argv = ["minilab.runner", "--model", "stub", "--tasks", "waiver-c101",
+                "--results", str(Path(self.td.name) / "r.jsonl"),
+                "--trajectories", str(Path(self.td.name) / "t.jsonl"), *extra]
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(err):
+            runner_main()
+        return out.getvalue(), err.getvalue()
+
+    def test_cli_does_not_report_an_unavailable_manifest_as_a_normal_success(self):
+        # PR #14 review R8: this used to print "wrote run manifest ... manifest_sha256 None".
+        from minilab import run_manifest
+        path = Path(self.td.name) / "m.json"
+        with mock.patch("minilab.runner._build_manifest",
+                        lambda *a, **k: run_manifest.manifest_unavailable(RuntimeError("x"), a[-1])):
+            out, err = self._cli("--manifest-out", str(path))
+        self.assertIn("MANIFEST UNAVAILABLE", err)
+        self.assertNotIn("wrote run manifest", out)
+        self.assertNotIn("manifest_sha256 None", out + err)
+        self.assertEqual(json.loads(path.read_text())["status"], "unavailable")   # the file stays honest
+
+    def test_cli_reports_an_available_manifest_with_its_hash(self):
+        path = Path(self.td.name) / "m.json"
+        out, err = self._cli("--manifest-out", str(path))
+        sha = json.loads(path.read_text())["manifest_sha256"]
+        self.assertRegex(sha, "^[0-9a-f]{64}$")
+        self.assertIn(f"manifest_sha256 {sha}", out)
+        self.assertNotIn("MANIFEST", err)
+
     def test_sqlite_becomes_unavailable_during_the_run(self):
         store = RunStore(self.db)
         dead = Path(self.td.name) / "gone"

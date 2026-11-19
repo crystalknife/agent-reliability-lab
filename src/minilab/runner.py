@@ -396,11 +396,6 @@ def run_experiment(task_ids=None, repeats=1, seed=0, model="stub",
     if framework != "minilab" and exec_mode != "sequential":
         raise ValueError(
             f"--exec {exec_mode!r} applies only to --framework minilab.")
-    if framework not in ("minilab", "langchain"):
-        raise ValueError(f"unknown framework: {framework!r} (use 'minilab' or 'langchain')")
-    if framework == "minilab" and strategy != "normal":
-        raise ValueError(
-            f"strategy {strategy!r} applies only to --framework langchain.")
     langchain_meta = None
     if framework == "langchain":
         from .frameworks.langchain import (
@@ -701,6 +696,11 @@ def main():
         print(f"MANIFEST NOT WRITTEN ({persistence.get('error_type')}): {a.manifest_out!r} was not "
               "created. The run completed and its results are valid, but there is no manifest "
               "file for it.", file=sys.stderr)
+    elif persistence.get("status") == "written" and run_info.get("manifest_status") == "unavailable":
+        print(f"MANIFEST UNAVAILABLE: {a.manifest_out} was written but records only that the provenance "
+              f"snapshot could not be built (experiment_id {run_info['experiment_id']}; the reason is in "
+              "the file). The run completed and its results are valid, but their provenance is not "
+              "established by this manifest.", file=sys.stderr)
     elif persistence.get("status") == "written":
         print(f"wrote run manifest to {a.manifest_out} (experiment_id {run_info['experiment_id']}, "
               f"manifest_sha256 {run_info.get('manifest_sha256')})")

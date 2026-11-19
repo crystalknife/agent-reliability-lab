@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 import warnings
 from pathlib import Path
+from unittest import mock
 
 from minilab.live import analytics
 from minilab.live.recorder import EventSink, LiveRecorder
@@ -936,6 +937,157 @@ class TestExclusivePort(unittest.TestCase):
         self.thread = threading.Thread(target=self.first.serve_forever, daemon=True)
         self.thread.start()
         self.assertEqual(self.health()[0], 200)
+
+
+class TestInMemoryDatabaseRefused(unittest.TestCase):
+    """PR #14 review F1: SQLite gives each connection its own ':memory:' (or '') database and
+    the store opens one connection per operation, so such a store lost its tables after the
+    constructor and every API request then died without an HTTP status. It is refused instead."""
+
+    def test_store_refuses_in_memory_and_temporary_names(self):
+        for name in (":memory:", ""):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "needs a database file path"):
+                RunStore(name)
+
+    def test_server_cli_exits_clearly_before_listening(self):
+        from minilab.live.server import main
+
+        def must_not_listen(*a, **k):  # a regression must fail here, not serve forever
+            raise AssertionError("the server was started with an in-memory database")
+        with mock.patch("minilab.live.server.LiveServer", must_not_listen), \
+                self.assertRaises(SystemExit) as ctx:
+            main(["--db", ":memory:", "--port", "0"])
+        self.assertIn("cannot use --db ':memory:' as the run database", str(ctx.exception.code))
+
+    def test_server_cli_reports_an_unopenable_database_file(self):
+        # server.main's sqlite3.Error / OSError branch. Before it, a directory given as --db
+        # escaped as a traceback, and a path under a regular file was misreported as a port clash.
+        import sqlite3
+        from minilab.live.server import main
+
+        def must_not_listen(*a, **k):
+            raise AssertionError("the server was started although its database could not be opened")
+        with tempfile.TemporaryDirectory() as td:
+            blocker = Path(td) / "a-file"
+            blocker.write_text("x")
+            for db, cause in ((td, sqlite3.Error), (str(blocker / "runs.sqlite"), OSError)):
+                with self.subTest(cause=f"{cause.__module__}.{cause.__name__}"):
+                    with mock.patch("minilab.live.server.LiveServer", must_not_listen), \
+                            self.assertRaises(SystemExit) as ctx:
+                        main(["--db", db, "--port", "0"])
+                    self.assertIn(f"cannot use --db {db!r} as the run database", str(ctx.exception.code))
+                    self.assertNotIn("cannot listen", str(ctx.exception.code))
+                    self.assertIsInstance(ctx.exception.__cause__, cause)
+
+    def test_runner_reports_live_recording_disabled(self):
+        from minilab.runner import _make_live_sink
+        self.assertEqual(_make_live_sink(":memory:"), (None, "ValueError"))
+
+    def test_a_file_database_still_works(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = RunStore(Path(td) / "runs.sqlite")
+            self.assertEqual(store.last_event_id(), 0)
+            self.assertEqual(RunStore(Path(td) / "runs.sqlite").list_experiments(), [])
+
+
+class TestInternalErrors(ServerCase):
+    """PR #14 review R3: an unexpected exception in a handler (a store error, here) used to
+    escape, so the client saw a dropped connection and no status. It is now a generic 500
+    with no internal detail, unless a response has already started."""
+
+    SECRET = "C:/private/runs.sqlite disk I/O error"
+
+    def failing(self, *a, **k):
+        import sqlite3
+        raise sqlite3.OperationalError(self.SECRET)
+
+    def assert_generic_500(self, status, body):
+        self.assertEqual(status, 500)
+        self.assertEqual(body, {"error": "internal server error"})
+
+    def quietly(self, fn, *a, **k):
+        """Run a request with the server's stderr captured; return (result, stderr text)."""
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = fn(*a, **k)
+        return out, err.getvalue()
+
+    def test_get_store_errors_become_a_generic_500(self):
+        eid, _ = start_synthetic_run(self.store, model="scripted", task_ids=TASK_IDS[:1], repeats=1)
+        self.wait_status(eid)
+        for path, attr in (("/api/health", "last_event_id"), ("/api/experiments", "list_experiments"),
+                           (f"/api/experiments/{eid}", "get_experiment"), ("/api/events", "events_after"),
+                           (f"/api/compare?a={eid}&b={eid}", "get_experiment")):
+            with self.subTest(path=path), mock.patch.object(self.store, attr, self.failing):
+                (status, body), err = self.quietly(self.get, path)
+                self.assert_generic_500(status, body)
+                # The detail goes to the local console only.
+                self.assertIn(f"internal error on GET {path.split('?')[0]}: OperationalError", err)
+
+    def test_the_server_keeps_serving_after_an_internal_error(self):
+        with mock.patch.object(self.store, "last_event_id", self.failing):
+            self.assertEqual(self.quietly(self.get, "/api/health")[0][0], 500)
+        self.assertEqual(self.get("/api/health")[0], 200)
+
+    def test_post_errors_become_a_generic_500(self):
+        with mock.patch("minilab.live.server.start_synthetic_run", self.failing):
+            (status, body), err = self.quietly(self.post, "/api/dev/synthetic-run",
+                                               {"model": "scripted", "task_ids": TASK_IDS[:1]})
+        self.assert_generic_500(status, body)
+        self.assertIn("internal error on POST /api/dev/synthetic-run: OperationalError", err)
+
+    def test_existing_client_error_responses_are_unchanged(self):
+        self.assertEqual(self.get("/api/events?after=abc")[0], 400)
+        self.assertEqual(self.get("/api/experiments/nope")[0], 404)
+        self.assertEqual(self.post("/api/dev/synthetic-run", {"model": "evil"})[0], 400)
+
+    def test_a_started_stream_is_closed_not_given_a_second_status(self):
+        calls = {"n": 0}
+        real = self.store.events_after
+
+        def fail_after_first(*a, **k):
+            calls["n"] += 1
+            if calls["n"] > 1:
+                self.failing()
+            return real(*a, **k)
+
+        def read_raw():
+            with socket.create_connection(self.server.server_address[:2], timeout=10) as s:
+                s.sendall(b"GET /api/stream HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+                buf = b""
+                while chunk := s.recv(65536):
+                    buf += chunk
+                return buf
+
+        with mock.patch.object(self.store, "events_after", fail_after_first):
+            raw, err = self.quietly(read_raw)
+        self.assertTrue(raw.startswith(b"HTTP/1.1 200"), raw[:40])
+        self.assertIn(b": connected", raw)
+        self.assertEqual(raw.count(b"HTTP/1."), 1, "a second status line was written into the stream")
+        self.assertNotIn(b"private", raw)
+        self.assertIn("internal error on GET /api/stream: OperationalError", err)
+
+    def test_a_value_error_inside_a_started_stream_gets_no_second_status(self):
+        # _get's `except ValueError` guard, which the test above does not reach (its error is
+        # not a ValueError). A corrupt event row makes events_after raise JSONDecodeError (a
+        # ValueError) after the stream's 200 was sent; it used to be answered with a 400 written
+        # into the stream.
+        import sqlite3
+        conn = sqlite3.connect(self.store.path)
+        with conn:
+            conn.execute("INSERT INTO events(experiment_id, ts, type, payload) VALUES ('x', 0, 'x', 'not json')")
+        conn.close()
+        with socket.create_connection(self.server.server_address[:2], timeout=10) as s:
+            s.sendall(b"GET /api/stream HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            raw = b""
+            while chunk := s.recv(65536):   # ends only when the server closes the connection
+                raw += chunk
+        self.assertTrue(raw.startswith(b"HTTP/1.1 200"), raw[:40])
+        self.assertIn(b": connected", raw)
+        self.assertEqual(raw.count(b"HTTP/1."), 1, "a second status line was written into the stream")
+        self.assertNotIn(b"bad request", raw)
 
 
 if __name__ == "__main__":

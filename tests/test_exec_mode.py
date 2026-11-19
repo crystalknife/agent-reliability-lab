@@ -203,6 +203,25 @@ class TestExecProvenance(unittest.TestCase):
                                trajectories_path=f"{td}/t.jsonl",
                                exec_mode="sideways")
 
+    def test_configuration_validation_is_unchanged(self):
+        # PR #14 review R9 removed a verbatim duplicate of the first two checks; every
+        # rejection still happens, before any file is created, with the same message.
+        import tempfile
+        cases = (({"framework": "crewai"}, "unknown framework: 'crewai'"),
+                 ({"framework": "minilab", "strategy": "chatter_stripped"},
+                  "strategy 'chatter_stripped' applies only to --framework langchain"),
+                 ({"exec_mode": "sideways"}, "unknown exec_mode: 'sideways'"),
+                 ({"framework": "langchain", "exec_mode": "batch"},
+                  "--exec 'batch' applies only to --framework minilab"))
+        for kwargs, message in cases:
+            with self.subTest(**kwargs), tempfile.TemporaryDirectory() as td:
+                with self.assertRaises(ValueError) as ctx:
+                    run_experiment(["waiver-c101"], repeats=1, model="scripted",
+                                   results_path=f"{td}/r.jsonl", trajectories_path=f"{td}/t.jsonl",
+                                   **kwargs)
+                self.assertIn(message, str(ctx.exception))
+                self.assertFalse(Path(f"{td}/r.jsonl").exists())
+
     def test_batch_counters_from_agent(self):
         task = get_task("calc-total-c101")
         calls = {"calls": [

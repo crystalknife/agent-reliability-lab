@@ -65,14 +65,21 @@ _Z_TABLE = {
 }
 
 
+# Only floating-point representation noise (e.g. 0.9 + 0.05 == 0.9500000000000001) is
+# treated as the tabulated level. Any genuinely different level, however close
+# (0.9549, 0.9949), is refused: computing it with a neighbouring z would report an
+# interval whose actual coverage is not the confidence it is labelled with.
+_CONFIDENCE_MATCH_TOL = 1e-12
+
+
 def _z_for_confidence(confidence: float) -> float:
-    try:
-        return _Z_TABLE[round(confidence, 2)]
-    except KeyError as e:
-        raise ValueError(
-            f"no tabulated z-value for confidence={confidence!r}; "
-            f"supported confidence levels: {sorted(_Z_TABLE)}"
-        ) from e
+    for level, z in _Z_TABLE.items():
+        if abs(confidence - level) <= _CONFIDENCE_MATCH_TOL:
+            return z
+    raise ValueError(
+        f"no tabulated z-value for confidence={confidence!r}; "
+        f"supported confidence levels: {sorted(_Z_TABLE)} (exact; near values are not rounded)"
+    )
 
 
 @dataclass(frozen=True)
