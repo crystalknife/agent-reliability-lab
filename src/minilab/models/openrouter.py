@@ -16,6 +16,8 @@ import json
 import os
 from typing import Any, Dict, List, Union
 
+from .local import to_api_messages
+
 try:
     from openai import OpenAI
 except ImportError as e:
@@ -85,6 +87,9 @@ def make_openrouter_model(model_name: str = DEFAULT_MODEL):
                 prop: Dict[str, Any] = {"type": json_schema_type}
                 if "description" in spec:
                     prop["description"] = spec["description"]
+                # Strict OpenAI-compatible validators reject an array parameter without `items`.
+                if "items" in spec:
+                    prop["items"] = spec["items"]
                 properties[param_name] = prop
                 if spec.get("required"):
                     required.append(param_name)
@@ -125,7 +130,9 @@ def make_openrouter_model(model_name: str = DEFAULT_MODEL):
         try:
             response = client.chat.completions.create(
                 model=model_name,
-                messages=messages,
+                # The agent's history holds dict-content tool calls and "observation:" turns,
+                # which OpenAI-compatible servers reject; send them in the API's own shape.
+                messages=to_api_messages(messages),
                 tools=tools,
                 tool_choice="auto",
                 temperature=temperature,
@@ -135,8 +142,10 @@ def make_openrouter_model(model_name: str = DEFAULT_MODEL):
             raise e
 
         choice = response.choices[0]
-        if choice.tool_calls:
-            tool_call = choice.tool_calls[0]
+        # Real SDK responses carry tool calls on the message; a Choice has no tool_calls field.
+        tool_calls = choice.message.tool_calls
+        if tool_calls:
+            tool_call = tool_calls[0]
             try:
                 args = json.loads(tool_call.function.arguments)
             except json.JSONDecodeError as e:

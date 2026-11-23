@@ -18,6 +18,8 @@ import json
 import os
 from typing import Any, Dict, List, Union
 
+from .local import to_api_messages
+
 try:
     from openai import OpenAI
 except ImportError as e:
@@ -120,15 +122,19 @@ def make_groq_model(model_name: str = DEFAULT_MODEL):
 
         response = client.chat.completions.create(
             model=model_name,
-            messages=messages,
+            # The agent's history holds dict-content tool calls and "observation:" turns,
+            # which OpenAI-compatible servers reject; send them in the API's own shape.
+            messages=to_api_messages(messages),
             tools=tools,
             tool_choice="auto",
             temperature=temperature,
         )
 
         choice = response.choices[0]
-        if choice.tool_calls:
-            tool_call = choice.tool_calls[0]
+        # Real SDK responses carry tool calls on the message; a Choice has no tool_calls field.
+        tool_calls = choice.message.tool_calls
+        if tool_calls:
+            tool_call = tool_calls[0]
             try:
                 args = json.loads(tool_call.function.arguments)
             except json.JSONDecodeError as e:

@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 from minilab.models.openrouter import make_openrouter_model, DEFAULT_MODEL, _import_error
+from sdk_chat import text_response, tool_call_response
 
 
 class TestOpenRouterAdapter(unittest.TestCase):
@@ -56,11 +57,7 @@ class TestOpenRouterAdapter(unittest.TestCase):
     def test_client_constructed_with_correct_base_url(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = []
-        mock_choice.message.content = "Test response"
-        mock_response.choices = [mock_choice]
+        mock_response = text_response("Test response")
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openrouter_model()
@@ -79,11 +76,7 @@ class TestOpenRouterAdapter(unittest.TestCase):
     def test_correct_model_id_passed(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = []
-        mock_choice.message.content = "Test response"
-        mock_response.choices = [mock_choice]
+        mock_response = text_response("Test response")
         mock_client.chat.completions.create.return_value = mock_response
 
         # Test default model
@@ -109,15 +102,7 @@ class TestOpenRouterAdapter(unittest.TestCase):
     def test_tool_call_parsing(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = [MagicMock()]
-        mock_choice.tool_calls[0].function.name = "get_account"
-        mock_choice.tool_calls[0].function.arguments = json.dumps(
-            {"customer_id": "C101"}
-        )
-        mock_choice.message.content = None
-        mock_response.choices = [mock_choice]
+        mock_response = tool_call_response("get_account", json.dumps({"customer_id": "C101"}))
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openrouter_model()
@@ -142,15 +127,7 @@ class TestOpenRouterAdapter(unittest.TestCase):
     def test_json_tool_arguments_parsed(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = [MagicMock()]
-        mock_choice.tool_calls[0].function.name = "calculate"
-        mock_choice.tool_calls[0].function.arguments = json.dumps(
-            {"op": "avg", "values": [1800, 1200]}
-        )
-        mock_choice.message.content = None
-        mock_response.choices = [mock_choice]
+        mock_response = tool_call_response("calculate", json.dumps({"op": "avg", "values": [1800, 1200]}))
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openrouter_model()
@@ -176,11 +153,7 @@ class TestOpenRouterAdapter(unittest.TestCase):
     def test_text_response_becomes_final_answer(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = []
-        mock_choice.message.content = "The customer qualifies for the fee waiver."
-        mock_response.choices = [mock_choice]
+        mock_response = text_response("The customer qualifies for the fee waiver.")
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openrouter_model()
@@ -196,13 +169,7 @@ class TestOpenRouterAdapter(unittest.TestCase):
     def test_malformed_json_propagates_as_error(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = [MagicMock()]
-        mock_choice.tool_calls[0].function.name = "calculate"
-        mock_choice.tool_calls[0].function.arguments = "not valid json"
-        mock_choice.message.content = None
-        mock_response.choices = [mock_choice]
+        mock_response = tool_call_response("calculate", "not valid json")
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openrouter_model()

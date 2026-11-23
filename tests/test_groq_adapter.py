@@ -21,28 +21,17 @@ from minilab.models.groq import (  # noqa: E402
 from minilab.runner import make_model  # noqa: E402
 from minilab.tasks import TASKS, get_task  # noqa: E402
 from minilab.tools import TOOL_SCHEMAS, dispatch  # noqa: E402
+from sdk_chat import text_response, tool_call_response  # noqa: E402
 
 
 def _tool_response(name, arguments):
-    """A Groq/OpenAI-compatible response carrying a single tool call."""
-    choice = MagicMock()
-    choice.tool_calls = [MagicMock()]
-    choice.tool_calls[0].function.name = name
-    choice.tool_calls[0].function.arguments = arguments
-    choice.message.content = None
-    response = MagicMock()
-    response.choices = [choice]
-    return response
+    """A real SDK response carrying a single tool call (arguments: raw JSON string)."""
+    return tool_call_response(name, arguments)
 
 
 def _text_response(content):
-    """A Groq/OpenAI-compatible response carrying only text."""
-    choice = MagicMock()
-    choice.tool_calls = []
-    choice.message.content = content
-    response = MagicMock()
-    response.choices = [choice]
-    return response
+    """A real SDK response carrying only text (content may be None)."""
+    return text_response(content)
 
 
 class TestGroqAdapter(unittest.TestCase):
