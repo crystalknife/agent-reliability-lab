@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 from minilab.models.openai import make_openai_model, _import_error
+from sdk_chat import text_response, tool_call_response
 
 
 class TestOpenAIAdapter(unittest.TestCase):
@@ -50,15 +51,7 @@ class TestOpenAIAdapter(unittest.TestCase):
         # Setup mock
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = [MagicMock()]
-        mock_choice.tool_calls[0].function.name = "get_account"
-        mock_choice.tool_calls[0].function.arguments = json.dumps(
-            {"customer_id": "C101"}
-        )
-        mock_choice.message.content = None  # Not used when tool_calls present
-        mock_response.choices = [mock_choice]
+        mock_response = tool_call_response("get_account", json.dumps({"customer_id": "C101"}))
         mock_client.chat.completions.create.return_value = mock_response
 
         # Create the model_fn
@@ -112,11 +105,7 @@ class TestOpenAIAdapter(unittest.TestCase):
         # Setup mock
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = []  # No tool calls
-        mock_choice.message.content = "The customer qualifies."
-        mock_response.choices = [mock_choice]
+        mock_response = text_response("The customer qualifies.")
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openai_model("gpt-4o")
@@ -132,13 +121,7 @@ class TestOpenAIAdapter(unittest.TestCase):
     def test_malformed_tool_call_arguments(self, mock_openai_class):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.tool_calls = [MagicMock()]
-        mock_choice.tool_calls[0].function.name = "calculate"
-        mock_choice.tool_calls[0].function.arguments = "not valid json"
-        mock_choice.message.content = None
-        mock_response.choices = [mock_choice]
+        mock_response = tool_call_response("calculate", "not valid json")
         mock_client.chat.completions.create.return_value = mock_response
 
         model_fn = make_openai_model("gpt-4o")

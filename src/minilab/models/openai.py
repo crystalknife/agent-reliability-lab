@@ -16,6 +16,8 @@ import json
 import os
 from typing import Any, Dict, List, Union
 
+from .local import to_api_messages
+
 try:
     from openai import OpenAI
 except ImportError as e:
@@ -92,6 +94,9 @@ def make_openai_model(
                 prop: Dict[str, Any] = {"type": json_schema_type}
                 if "description" in spec:
                     prop["description"] = spec["description"]
+                # OpenAI rejects an array parameter without `items` (400 invalid_function_parameters).
+                if "items" in spec:
+                    prop["items"] = spec["items"]
                 properties[param_name] = prop
                 if spec.get("required"):
                     required.append(param_name)
@@ -127,7 +132,9 @@ def make_openai_model(
         try:
             response = client.chat.completions.create(
                 model=model_name,
-                messages=messages,
+                # The agent's history holds dict-content tool calls and "observation:" turns,
+                # which OpenAI-compatible servers reject; send them in the API's own shape.
+                messages=to_api_messages(messages),
                 tools=tools,
                 tool_choice="auto",  # Let the model decide when to use a tool
                 temperature=temperature,
@@ -137,9 +144,11 @@ def make_openai_model(
             raise e
 
         choice = response.choices[0]
-        if choice.tool_calls:
+        # Real SDK responses carry tool calls on the message; a Choice has no tool_calls field.
+        tool_calls = choice.message.tool_calls
+        if tool_calls:
             # We assume at most one tool call (as per our agent loop's design)
-            tool_call = choice.tool_calls[0]
+            tool_call = tool_calls[0]
             # The arguments are a JSON string
             try:
                 args = json.loads(tool_call.function.arguments)
