@@ -1,12 +1,10 @@
 """Local llama.cpp adapter for the Mini Agent Reliability Lab.
 
-The local server exposes an OpenAI-compatible /v1 chat completions endpoint,
-but this adapter does NOT reuse make_openai_model: that helper (like the other
-OpenAI-compatible adapters) reads tool calls from `choice.tool_calls`, which
-does not exist on real OpenAI SDK responses (they live at
-`choice.message.tool_calls`). Reusing it would turn every real tool call into
-an AttributeError. This adapter is therefore self-contained and parses the
-real response shape.
+The local server exposes an OpenAI-compatible /v1 chat completions endpoint.
+This adapter stays self-contained rather than reusing make_openai_model: it
+returns every tool call of a multi-call response as {"calls": [...]}, while
+the hosted OpenAI-compatible adapters keep only the first call. Its
+to_api_messages converter is shared with those adapters.
 
     model_fn(messages, tool_schemas, config) -> {"tool", "arguments"} | {"calls", [...]} | {"final"}
 

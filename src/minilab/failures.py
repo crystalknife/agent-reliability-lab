@@ -129,6 +129,134 @@ def classify_trial(trajectory, evaluator_raised=False):
     return "valid"
 
 
+# ---------------------------------------------------------------------------
+# Fault origin (2026-11-16). A NON-SCORING annotation: it never changes
+# trial_status, the agent taxonomy or any reliability number.
+#
+# It reports three separate things and never merges them:
+#   origin       WHAT was observed at the exception boundary
+#   attribution  whether that observation establishes WHOSE fault it was
+#                ("established") or not ("unattributed")
+#   basis        how the observation was made (typed record vs message text)
+#
+# Deliberately conservative: an exception class from a provider SDK does not
+# prove the provider was at fault (a 401 is a credential/configuration
+# matter; a 400 may be a request the local adapter built wrongly; a timeout
+# may be the local network or a local model server). Only "the service
+# answered with a server-side error status" is treated as established, and
+# even then the service may be a local one.
+# ---------------------------------------------------------------------------
+FAULT_ORIGINS = (
+    "none",
+    # model-call boundary
+    "model_service_error",          # the model service answered 429 or 5xx (status read from the exception object)
+    "request_rejected",             # the service answered 4xx: credentials, configuration, model name or the adapter's request
+    "transport",                    # no response: connection or timeout (local network, local server or remote)
+    "sdk_unattributed",             # an SDK exception with no status and no transport class (e.g. SDK-side validation/configuration)
+    "model_call_local",             # a non-SDK exception: local adapter logic, or adapter parsing of malformed model output
+    # output-validation boundary
+    "model_output_format",          # the model's response had no valid call/final shape
+    # tool-dispatch boundary
+    "agent_unknown_tool",           # the agent named a tool that does not exist
+    "agent_invalid_arguments",      # the tool raised and the arguments violate the tool's declared schema
+    "tool_or_environment",          # the tool raised although the arguments satisfy the declared schema
+    "tool_execution_unattributed",  # the tool raised and schema conformance could not be determined
+    # evaluator boundary
+    "evaluator",
+    # no typed record (historical trajectories, LangChain path)
+    "provider_suspected",           # the legacy message-text rule matched a provider pattern
+    "model_call_unattributed",      # a model_error with no typed record and no provider pattern
+)
+FAULT_ATTRIBUTIONS = ("established", "unattributed", "none")
+FAULT_BASES = ("typed_boundary_and_class", "typed_boundary_only", "text_heuristic", "none")
+
+# Top-level modules of provider SDKs and HTTP stacks used by the adapters.
+_SDK_ROOTS = ("openai", "httpx", "httpcore", "google", "requests", "urllib3", "aiohttp", "grpc",
+              "langchain_openai", "langchain_core", "pydantic", "pydantic_core")
+# Class names (the class itself or any base) that mean "no response arrived".
+_TRANSPORT_NAMES = frozenset((
+    "ConnectionError", "ConnectionRefusedError", "ConnectionResetError", "ConnectionAbortedError",
+    "BrokenPipeError", "TimeoutError", "timeout", "gaierror", "herror", "SSLError", "URLError",
+    "RemoteDisconnected", "IncompleteRead",
+    "APIConnectionError", "APITimeoutError", "ConnectError", "ConnectTimeout", "ReadTimeout",
+    "WriteTimeout", "PoolTimeout", "TimeoutException", "NetworkError", "TransportError",
+    "ReadError", "WriteError", "RemoteProtocolError",
+))
+
+
+def _typed_fault(trajectory):
+    """The first typed fault record in the trajectory, or None (historical
+    trajectories and the LangChain path carry none)."""
+    for s in _steps_of(trajectory):
+        obs = _as_dict(s).get("observation")
+        if isinstance(obs, dict) and isinstance(obs.get("fault"), dict):
+            f = obs["fault"]
+            if isinstance(f.get("boundary"), str):
+                return f
+    return None
+
+
+def fault_origin(trajectory, evaluator_raised=False, evaluator_exception=None):
+    """Return {"origin", "attribution", "basis", "boundary", "exception_type",
+    "http_status"}. See the block comment above for what each means.
+
+    Historical trajectories and adapters/frameworks that record no typed
+    fault fall back to the legacy message-text rule and are marked
+    basis="text_heuristic", attribution="unattributed".
+    """
+    def out(origin, attribution, basis, fault=None):
+        fault = fault or {}
+        return {"origin": origin, "attribution": attribution, "basis": basis,
+                "boundary": fault.get("boundary"), "exception_type": fault.get("exception_type"),
+                "http_status": fault.get("http_status")}
+
+    if evaluator_raised:
+        if evaluator_exception is not None:
+            return out("evaluator", "established", "typed_boundary_and_class",
+                       {"boundary": "evaluator", "exception_type": type(evaluator_exception).__name__})
+        return out("evaluator", "established", "typed_boundary_only", {"boundary": "evaluator"})
+
+    fault = _typed_fault(trajectory)
+    if fault is not None:
+        boundary = fault["boundary"]
+        has_class = isinstance(fault.get("exception_type"), str)
+        basis = "typed_boundary_and_class" if has_class else "typed_boundary_only"
+        if boundary == "model_output_validation":
+            return out("model_output_format", "established", "typed_boundary_only", fault)
+        if boundary == "model_call":
+            names = {fault.get("exception_type")} | set(fault.get("exception_bases") or [])
+            module_root = str(fault.get("exception_module") or "").split(".")[0]
+            # D2: a status-like attribute is trusted only on an SDK/HTTP-stack exception class
+            status = fault.get("http_status") if module_root in _SDK_ROOTS else None
+            fault = {**fault, "http_status": status}
+            if isinstance(status, int) and (status == 429 or 500 <= status <= 599):
+                return out("model_service_error", "established", basis, fault)
+            if isinstance(status, int) and 400 <= status <= 499:
+                return out("request_rejected", "unattributed", basis, fault)
+            if names & _TRANSPORT_NAMES:
+                return out("transport", "unattributed", basis, fault)
+            if module_root in _SDK_ROOTS:
+                return out("sdk_unattributed", "unattributed", basis, fault)
+            return out("model_call_local", "unattributed", basis, fault)
+        if boundary == "tool_dispatch":
+            if fault.get("tool_known") is False:
+                return out("agent_unknown_tool", "established", basis, fault)
+            valid = fault.get("arguments_schema_valid")
+            if valid is False:
+                return out("agent_invalid_arguments", "established", basis, fault)
+            if valid is True:
+                return out("tool_or_environment", "unattributed", basis, fault)
+            return out("tool_execution_unattributed", "unattributed", basis, fault)
+        return out("tool_execution_unattributed", "unattributed", basis, fault)
+
+    text = _error_text(trajectory).lower()
+    if text and (any(p in text for p in _PROVIDER_PATTERNS) or _HTTP_CODE_RE.search(text)):
+        return out("provider_suspected", "unattributed", "text_heuristic")
+    if text and _termination_of(trajectory) == "model_error":
+        return out("model_call_unattributed", "unattributed", "text_heuristic")
+    return out("none", "none", "none")
+
+
 def classify(task, trajectory, eval_result):
     """Return one of FAILURES. eval_result is the dict from evaluation.evaluate.
 

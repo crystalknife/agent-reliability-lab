@@ -23,27 +23,19 @@ from minilab.models.omniroute import (  # noqa: E402
 from minilab.runner import make_model  # noqa: E402
 from minilab.tasks import get_task  # noqa: E402
 from minilab.tools import TOOL_SCHEMAS, build_system_prompt  # noqa: E402
+from sdk_chat import text_response, tool_call_response  # noqa: E402
 
 FIVE = ["get_customer", "get_account", "get_transactions", "search_policy", "calculate"]
 
 
 def _tool_response(name, args):
-    response = MagicMock()
-    choice = response.choices[0]
-    choice.tool_calls = [MagicMock()]
-    call = choice.tool_calls[0]
-    call.function.name = name
-    call.function.arguments = json.dumps(args)
-    choice.message.content = None
-    return response
+    """A real SDK response carrying a single tool call (args: dict, sent as JSON)."""
+    return tool_call_response(name, json.dumps(args))
 
 
 def _text_response(text):
-    response = MagicMock()
-    choice = response.choices[0]
-    choice.tool_calls = None
-    choice.message.content = text
-    return response
+    """A real SDK response carrying only text."""
+    return text_response(text)
 
 
 def _sent_tools(client):
@@ -228,10 +220,7 @@ class TestOmniRouteAdapter(unittest.TestCase):
         self.assertEqual(out, {"final": "The customer qualifies."})
 
     def test_malformed_tool_arguments_raise(self):
-        response = MagicMock()
-        call = response.choices[0].tool_calls[0]
-        call.function.name = "get_account"
-        call.function.arguments = "{not json"
+        response = tool_call_response("get_account", "{not json")
         with patch("minilab.models.openai.OpenAI") as mock_openai:
             client = mock_openai.return_value
             client.chat.completions.create.return_value = response
@@ -265,9 +254,16 @@ class TestOmniRouteAdapter(unittest.TestCase):
         self.assertEqual(len(traj.steps), 1)
         self.assertEqual(traj.steps[0].action, "get_customer")
         self.assertEqual(traj.final_answer, "C101 exists.")
-        # Second request carried the observation back through the standard history.
+        # Second request carried the observation back, in the API's own shape: the tool call as
+        # an assistant `tool_calls` message and the observation as the matching `tool` message.
+        # (It used to assert the raw "observation:" user turn, which real servers reject: HTTP 400.)
         second = client.chat.completions.create.call_args_list[1].kwargs["messages"]
-        self.assertTrue(any("observation:" in str(m["content"]) for m in second))
+        calls = [m for m in second if m.get("role") == "assistant" and m.get("tool_calls")]
+        tools = [m for m in second if m.get("role") == "tool"]
+        self.assertEqual([c["tool_calls"][0]["function"]["name"] for c in calls], ["get_customer"])
+        self.assertEqual([t["tool_call_id"] for t in tools], [calls[0]["tool_calls"][0]["id"]])
+        self.assertIn("C101", tools[0]["content"])
+        self.assertFalse(any(isinstance(m.get("content"), dict) for m in second))
 
     def test_provider_failure_becomes_model_error(self):
         with patch("minilab.models.openai.OpenAI") as mock_openai:
